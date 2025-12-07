@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <title>2FMusic</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="2FMusic">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/ICON_256.PNG') }}">
+    
+    <meta name="theme-color" content="#000000">
+
+    <script>
+        (function() {
+            function setScale() {
+                if (window.innerWidth > 768) {
+                    let scale = Math.min(Math.max(window.innerWidth / 1440, 0.8), 1.2);
+                    document.documentElement.style.setProperty('--ui-scale', scale.toFixed(3));
+                } else {
+                    document.documentElement.style.setProperty('--ui-scale', '1.0');
+                }
+            }
+            setScale();
+            window.addEventListener('resize', setScale);
+        })();
+    </script>
+
+    <link rel="icon" href="{{ url_for('static', filename='images/ICON_256.PNG') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/font-awesome/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div id="app">
+    <aside id="sidebar" class="glass-panel">
+        <div class="brand">
+            <a href="https://github.com/yuexps" target="_blank" class="icon-btn" title="View on GitHub" style="color: var(--text-main); display: flex; align-items: center; text-decoration: none;">
+                <i class="fab fa-github" style="font-size: 2rem;"></i>
+            </a>
+            <span>2FMusic</span>
+        </div>
+        <nav>
+            <ul>
+                <li class="active" id="nav-local"><i class="fas fa-music"></i> <span>本地音乐</span></li>
+                <li id="nav-fav"><i class="fas fa-heart"></i> <span>我的收藏</span></li>
+                <li id="nav-mount"><i class="fas fa-network-wired"></i> <span>挂载管理</span></li>
+                <li id="nav-upload"><i class="fas fa-cloud-upload-alt"></i> <span>上传音乐</span></li>
+            </ul>
+        </nav>
+    </aside>
+
+    <main id="main-content">
+        <header class="top-bar">
+            <button id="mobile-menu-btn"><i class="fas fa-bars"></i></button>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="搜索本地歌曲...">
+            </div>
+        </header>
+
+        <div class="content-scroll">
+            <div id="view-player">
+                <div class="section-title" id="list-title">歌曲列表</div>
+                <div class="song-list" id="song-list-container">
+                    <div class="loading">正在扫描音乐库...</div>
+                </div>
+            </div>
+
+            <div id="view-mount" class="hidden">
+                <div class="section-title">挂载目录管理</div>
+                
+                <div class="mount-add-section glass-panel">
+                    <h3><i class="fas fa-folder-plus"></i> 添加挂载点</h3>
+                    <p class="mount-hint">输入服务器上的文件夹绝对路径（如 D:\Music 或 /mnt/music），系统将自动创建软链接并导入。</p>
+                    <div class="mount-input-group">
+                        <input type="text" id="mount-path-input" placeholder="输入绝对路径...">
+                        <button id="btn-add-mount" class="btn-primary">添加</button>
+                    </div>
+                </div>
+
+                <div class="section-subtitle">已挂载目录</div>
+                <div id="mount-list-container">
+                    <div class="loading-text">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer id="player-bar">
+        <div class="player-info" id="open-detail-view" title="点击查看歌词">
+            <img src="{{ url_for('static', filename='images/ICON_256.PNG') }}" id="current-cover" alt="Cover">
+            <div class="info-text">
+                <div id="current-title">等待播放</div>
+                <div id="current-artist">2FMusic</div>
+            </div>
+        </div>
+
+        <div class="player-controls">
+            <div class="buttons">
+                <button class="icon-btn" id="btn-prev"><i class="fas fa-step-backward"></i></button>
+                <button class="play-btn" id="btn-play"><i class="fas fa-play"></i></button>
+                <button class="icon-btn" id="btn-next"><i class="fas fa-step-forward"></i></button>
+            </div>
+            <div class="progress-container">
+                <span id="time-current">0:00</span>
+                <input type="range" id="progress-bar" value="0" min="0" max="100" step="0.1">
+                <span id="time-total">0:00</span>
+            </div>
+        </div>
+
+        <div class="player-extra">
+            <button class="icon-btn" id="btn-mute" style="width: 2rem; text-align: center;">
+                <i class="fas fa-volume-up" id="vol-icon"></i>
+            </button>
+            <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+        </div>
+
+        <button id="mobile-mini-play" class="icon-btn" style="display: none; font-size: 1.5rem; padding: 1rem;">
+            <i class="fas fa-play"></i>
+        </button>
+    </footer>
+
+    <div id="full-player-overlay">
+        <div class="fp-header">
+            <button id="close-detail-view"><i class="fas fa-chevron-down"></i></button>
+            <span>正在播放</span>
+            <div class="fp-header-right">
+                <button id="fp-menu-btn" class="icon-btn"><i class="fas fa-ellipsis-h"></i></button>
+            </div>
+        </div>
+
+        <div class="fp-content">
+            <div class="fp-art-area">
+                <img src="{{ url_for('static', filename='images/ICON_256.PNG') }}" id="fp-cover" alt="Cover">
+                <div class="fp-info">
+                    <h2 id="fp-title">歌曲标题</h2>
+                    <p id="fp-artist">歌手</p>
+                </div>
+            </div>
+
+            <div class="fp-lyrics-area" id="lyrics-container">
+                <p class="lyric-line">暂无歌词</p>
+            </div>
+        </div>
+
+        <div class="fp-controls">
+            <div class="fp-progress-bar">
+                <span id="fp-time-current">0:00</span>
+                <input type="range" id="fp-progress-bar" value="0" step="0.1">
+                <span id="fp-time-total">0:00</span>
+            </div>
+            <div class="fp-buttons">
+                <button class="icon-btn" id="fp-btn-mode" title="切换模式"><i class="fas fa-redo"></i></button>
+                <button class="icon-btn" id="fp-btn-prev"><i class="fas fa-step-backward"></i></button>
+                <button class="play-btn play-huge" id="fp-btn-play"><i class="fas fa-play"></i></button>
+                <button class="icon-btn" id="fp-btn-next"><i class="fas fa-step-forward"></i></button>
+                <button class="icon-btn" id="fp-btn-fav" title="收藏"><i class="far fa-heart"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="upload-modal">
+        <div class="upload-box glass-panel">
+            <h3><i class="fas fa-cloud-upload-alt"></i> 上传文件</h3>
+            <p id="upload-filename">filename.mp3</p>
+            <div class="upload-progress-track">
+                <div class="upload-progress-fill" id="upload-progress-fill"></div>
+            </div>
+            <div class="upload-status">
+                <span id="upload-percent">0%</span>
+                <span id="upload-msg">准备中...</span>
+            </div>
+            <button id="close-upload-modal" class="icon-btn" style="margin-top: 1rem; display: none;">关闭</button>
+        </div>
+    </div>
+
+    <div id="action-menu-overlay" class="custom-overlay">
+        <div class="action-sheet glass-panel">
+            <div class="action-header">更多操作</div>
+            <button class="action-item delete" id="action-delete">
+                <i class="fas fa-trash-alt"></i> 永久删除
+            </button>
+            <button class="action-item cancel" id="action-cancel">取消</button>
+        </div>
+    </div>
+
+    <div id="confirm-modal-overlay" class="custom-overlay">
+        <div class="confirm-box glass-panel">
+            <h3><i class="fas fa-exclamation-triangle"></i> 确认操作</h3>
+            <p>确定要执行此操作吗？</p>
+            <div class="confirm-buttons">
+                <button id="confirm-yes" class="btn-danger">确认</button>
+                <button id="confirm-no" class="btn-normal">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <input type="file" id="file-upload" accept=".mp3,.flac,.wav,.ogg,.m4a" style="display: none;">
+
+</div>
+
+<audio id="audio-player"></audio>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

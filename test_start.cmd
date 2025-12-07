@@ -1,0 +1,1 @@
+python app/server/app.py --music-library-path "%cd%/test_tmp/Music" --log-path "%cd%/test_tmp/app.log" --port 23237
