@@ -1,0 +1,19 @@
+# Node
+app/api/node_modules/
+app/api/package-lock.json
+app/api/pnpm-lock.yaml
+app/api/.env
+
+
+# Local data/cache
+app/server/app.log
+app/server/library_cache.db
+app/server/Music/
+app/server/lyrics/
+app/server/covers/
+app/server/.netease_cookie
+
+# OS/IDE
+.DS_Store
+.idea/
+.vscode/
