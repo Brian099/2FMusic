@@ -1,7 +1,7 @@
-import { state, persistState, saveFavorites } from './state.js';
+import { state, persistState, saveFavorites, savePlaylist } from './state.js';
 import { ui } from './ui.js';
 import { api } from './api.js';
-import { showToast, showConfirmDialog, hideProgressToast, updateDetailFavButton, formatTime, renderNoLyrics, updateSliderFill, flyToElement } from './utils.js';
+import { showToast, showConfirmDialog, hideProgressToast, updateDetailFavButton, formatTime, renderNoLyrics, updateSliderFill, flyToElement, throttle } from './utils.js';
 import { startScanPolling, loadMountPoints } from './mounts.js';
 
 // 收藏
@@ -22,19 +22,54 @@ function toggleFavorite(song, btnEl) {
   persistState(ui.audio);
 }
 
+const throttledPersist = throttle(() => persistState(ui.audio), 2000);
+
 export async function loadSongs(retry = true) {
+  // 1. 优先使用缓存显示 (SWR)
+  if (state.fullPlaylist.length > 0 && state.playQueue.length === 0) {
+    state.playQueue = [...state.fullPlaylist];
+    if (state.currentTab === 'local' || state.currentTab === 'fav') renderPlaylist();
+    // 尝试立即恢复状态
+    if (!ui.audio.src) { initPlayerState(); }
+  }
+
   try {
     const json = await api.library.list();
     if (json.success && json.data) {
-      state.fullPlaylist = json.data.map(item => ({
-        ...item,
-        title: item.title || item.filename,
-        artist: item.artist || '未知艺术家',
-        src: `/api/music/play/${encodeURIComponent(item.filename)}`,
-        cover: item.album_art || '/static/images/ICON_256.PNG',
-      }));
+      // 2. 合并数据：保留本地缓存的封面和歌词
+      const oldMap = new Map(state.fullPlaylist.map(s => [s.filename, s]));
+      const newList = json.data.map(item => {
+        const old = oldMap.get(item.filename);
+        return {
+          ...item,
+          title: item.title || item.filename,
+          artist: item.artist || '未知艺术家',
+          src: `/api/music/play/${encodeURIComponent(item.filename)}`,
+          // 如果缓存中有非默认封面，则保留
+          cover: (old && old.cover && !old.cover.includes('ICON_256')) ? old.cover : (item.album_art || '/static/images/ICON_256.PNG'),
+          // 如果缓存中有歌词，则保留
+          lyrics: (old && old.lyrics) ? old.lyrics : item.lyrics
+        };
+      });
+
+      state.fullPlaylist = newList;
+      savePlaylist(); // 更新缓存
+
+      // 3. 更新播放队列上下文
+      if (state.currentTab === 'local') {
+        const currentFilename = state.playQueue[state.currentTrackIndex]?.filename;
+        state.playQueue = [...state.fullPlaylist];
+        if (currentFilename) {
+          const newIdx = state.playQueue.findIndex(s => s.filename === currentFilename);
+          if (newIdx !== -1) state.currentTrackIndex = newIdx;
+        }
+        renderPlaylist();
+      } else if (state.currentTab === 'fav') {
+        // 刷新收藏列表
+        renderPlaylist();
+      }
+
       if (state.playQueue.length === 0) state.playQueue = [...state.fullPlaylist];
-      if (state.currentTab === 'local' || state.currentTab === 'fav') renderPlaylist();
       if (!ui.audio.src) { await initPlayerState(); }
     } else {
       if (ui.songContainer.children.length === 0)
@@ -192,13 +227,35 @@ async function initPlayerState() {
   if (state.savedState.playMode !== undefined) { state.playMode = state.savedState.playMode; updatePlayModeUI(); }
 
   if (state.savedState.currentFilename) {
-    const idx = state.playQueue.findIndex(s => s.filename === state.savedState.currentFilename);
+    // 优先通过文件名匹配，而不是索引
+    const targetFilename = state.savedState.currentFilename;
+    // 如果是收藏列表，确保当前队列是基于收藏过滤的? 
+    // 上面 switchTab 已经做了，但 state.playQueue 可能还没更新（如果是 cachedPlaylist 刚加载）
+    // renderPlaylist 会更新 displayPlaylist，但 playQueue 只有点击才更新?
+    // initPlayerState 不应该依赖 playQueue? 
+    // playTrack index 必须是 playQueue 的 index。
+    // 如果当前 tab 是 local，playQueue 默认是 full。
+
+    // 简单起见，我们先在 fullPlaylist 里找，或者在当前 playQueue 里找
+    let idx = state.playQueue.findIndex(s => s.filename === targetFilename);
+    // 如果没找到且 playQueue 为空，则重建队列
+    if (idx === -1 && state.playQueue.length > 0) {
+      // 尝试在 playQueue 找
+      idx = state.playQueue.findIndex(s => s.filename === targetFilename);
+    }
+
     if (idx !== -1) {
       state.currentTrackIndex = idx;
       await playTrack(idx, false);
+
+      // 稳健恢复进度
       if (state.savedState.currentTime) {
-        ui.audio.currentTime = state.savedState.currentTime;
-        const pct = (ui.audio.currentTime / ui.audio.duration) * 100 || 0;
+        const t = state.savedState.currentTime;
+        const seek = () => { if (Math.abs(ui.audio.currentTime - t) > 1) ui.audio.currentTime = t; };
+        if (ui.audio.readyState >= 1) seek();
+        else ui.audio.addEventListener('loadedmetadata', seek, { once: true });
+
+        const pct = (t / (ui.audio.duration || 100)) * 100;
         if (ui.progressBar) { ui.progressBar.value = pct; updateSliderFill(ui.progressBar); }
         if (ui.fpProgressBar) { ui.fpProgressBar.value = pct; updateSliderFill(ui.fpProgressBar); }
       }
@@ -291,7 +348,9 @@ function toggleMute() {
 }
 
 updateSliderFill(ui.progressBar); updateSliderFill(ui.fpProgressBar); updateSliderFill(ui.volumeSlider);
+ui.audio.addEventListener('pause', () => persistState(ui.audio)); // 暂停时保存
 ui.audio.addEventListener('timeupdate', () => {
+  throttledPersist(); // 定期保存
   if (!ui.audio.duration) return;
   const percent = (ui.audio.currentTime / ui.audio.duration) * 100;
   const timeStr = formatTime(ui.audio.currentTime);
@@ -325,7 +384,7 @@ async function checkAndFetchMetadata(track, fetchId) {
     try {
       const d = await api.library.lyrics(query);
       if (fetchId !== state.currentFetchId) return;
-      if (d.success && d.lyrics) { track.lyrics = d.lyrics; parseAndRenderLyrics(d.lyrics); }
+      if (d.success && d.lyrics) { track.lyrics = d.lyrics; savePlaylist(); parseAndRenderLyrics(d.lyrics); }
       else { renderNoLyrics('暂无歌词'); }
     } catch (e) { if (fetchId === state.currentFetchId) renderNoLyrics('歌词加载失败'); }
   }
@@ -335,6 +394,7 @@ async function checkAndFetchMetadata(track, fetchId) {
       if (fetchId !== state.currentFetchId) return;
       if (d.success && d.album_art) {
         track.cover = d.album_art;
+        savePlaylist(); // 保存封面更新
         if (ui.audio.src.includes(encodeURIComponent(track.filename))) { ['current-cover', 'fp-cover'].forEach(id => { const el = document.getElementById(id); if (el) el.src = track.cover; }); }
         renderPlaylist();
       }
@@ -453,6 +513,8 @@ export function bindUiControls() {
 export async function initPlayer() {
   bindUiControls();
   bindPlayerEvents();
+  // 立即恢复 Tab 状态，避免刷新时闪烁到默认页面
+  switchTab(state.currentTab);
   await loadSongs();
   await handleExternalFile();
 }

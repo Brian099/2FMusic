@@ -1763,9 +1763,11 @@ input[type=range]::-webkit-slider-thumb {
     align-items: center;
     transition: background 0.2s ease;
 }
+
 .netease-download-row:hover {
     background: rgba(255, 255, 255, 0.05);
 }
+
 .netease-download-meta {
     display: flex;
     flex-direction: column;
@@ -1773,6 +1775,7 @@ input[type=range]::-webkit-slider-thumb {
     flex: 1;
     margin-right: 1rem;
 }
+
 .netease-download-meta .title {
     font-size: 0.9rem;
     font-weight: bold;
@@ -1780,20 +1783,34 @@ input[type=range]::-webkit-slider-thumb {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
 .netease-download-meta .artist {
     font-size: 0.75rem;
     color: rgba(255, 255, 255, 0.5);
 }
+
 .download-status {
     font-size: 0.75rem;
     display: flex;
     align-items: center;
     gap: 0.3rem;
 }
-.download-status.status-wait { color: rgba(255,255,255,0.65); }
-.download-status.status-progress { color: var(--primary); }
-.download-status.status-done { color: #43d9ad; }
-.download-status.status-error { color: #ff8080; }
+
+.download-status.status-wait {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.download-status.status-progress {
+    color: var(--primary);
+}
+
+.download-status.status-done {
+    color: #43d9ad;
+}
+
+.download-status.status-error {
+    color: #ff8080;
+}
 
 .download-item {
     padding: 0.8rem;
@@ -2123,5 +2140,88 @@ input[type=range]::-webkit-slider-thumb {
     .netease-actions {
         grid-column: 1 / -1;
         justify-content: flex-start;
+    }
+}
+
+/* === Loading Spinner === */
+.loading {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 65vh;
+    /* 占据大部分屏幕高度以居中 */
+    width: 100%;
+}
+
+.loading-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 3rem;
+    border-radius: 1.5rem;
+
+    /* 磨砂玻璃卡片效果 */
+    background: rgba(30, 30, 30, 0.4);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.loading-spinner {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    /* 使用锥形渐变制作高级光环 */
+    background: conic-gradient(from 0deg, transparent 0%, var(--primary) 100%);
+    position: relative;
+    animation: spin 1s linear infinite;
+    /* 遮罩做出圆环效果 */
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 4px + 0.5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 4px + 0.5px));
+}
+
+/* 增加一个辉光圆点 */
+.loading-spinner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    background: var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 0 10px 2px var(--primary);
+}
+
+.loading-text {
+    font-size: 1rem;
+    color: var(--text-sub);
+    letter-spacing: 1px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
     }
 }

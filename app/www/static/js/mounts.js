@@ -17,8 +17,11 @@ export function startScanPolling(isUserAction = false, onRefreshSongs, onRefresh
       if (status.scanning) {
         hasTrackedScan = true;
         if (!isModalOpen) {
-          const percent = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
-          showToast(`正在处理库... ${status.processed}/${status.total} (${percent}%)`, true);
+          // 仅在用户手动操作或没有任何为歌曲时才显示扫描进度，避免打扰
+          if (isUserAction || state.fullPlaylist.length === 0) {
+            const percent = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+            showToast(`正在处理库... ${status.processed}/${status.total} (${percent}%)`, true);
+          }
         }
         if (status.processed % 20 === 0 && onRefreshSongs) onRefreshSongs(false);
       } else {

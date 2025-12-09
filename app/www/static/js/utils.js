@@ -1,6 +1,19 @@
 import { state, persistState, saveFavorites } from './state.js';
 import { ui } from './ui.js';
 
+export function throttle(func, limit) {
+  let inThrottle;
+  return function () {
+    const args = arguments;
+    const context = this;
+    if (!inThrottle) {
+      func.apply(context, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  }
+}
+
 export function autoResizeUI() {
   if (window.innerWidth > 768) {
     const scale = Math.min(Math.max(window.innerWidth / 1440, 0.8), 1.2);

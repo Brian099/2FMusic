@@ -64,8 +64,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 初始化模块
   initMounts(loadSongs);
+  await initPlayer();   // 优先初始化播放器，确保缓存秒开
   await initNetease(loadSongs);
-  await initPlayer();
   loadMountPoints();
   startScanPolling(false, loadSongs, loadMountPoints);
 });
