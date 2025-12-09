@@ -435,7 +435,7 @@ async function startNeteaseLogin() {
     if (ui.neteaseLoginStatus) ui.neteaseLoginStatus.innerText = '等待扫码...';
     ui.neteaseLoginCard?.classList.remove('status-ok');
     ui.neteaseLoginCard?.classList.add('status-bad');
-    state.neteasePollingTimer = setInterval(checkLoginStatus, 2000);
+    state.neteasePollingTimer = setInterval(checkLoginStatus, 800);
   } catch (err) {
     console.error('login qr error', err);
     showToast('获取二维码失败');
@@ -538,14 +538,12 @@ function bindEvents() {
   });
   ui.neteaseApiGateBtn?.addEventListener('click', bindNeteaseApi);
   if (ui.neteaseChangeApiBtn) ui.neteaseChangeApiBtn.addEventListener('click', () => toggleNeteaseGate(false));
-  ui.neteaseOpenConfigBtn.addEventListener('click', () => {
+  ui.neteaseOpenConfigBtn?.addEventListener('click', () => {
     ui.neteaseApiGateInput.focus();
     ui.neteaseApiGateInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 }
 
-// 自动安装按钮事件
-// 自动安装按钮事件
 // 自动安装按钮事件
 const installBtn = document.getElementById('netease-api-install-btn');
 const progressContainer = document.getElementById('install-progress-container');
@@ -621,6 +619,21 @@ if (installBtn) {
 export async function initNetease(onRefreshSongs) {
   songRefreshCallback = onRefreshSongs;
   bindEvents();
+
+  // 1. Optimistic UI: Load from cache immediately
+  try {
+    const saved = localStorage.getItem('2fmusic_netease_user');
+    if (saved) {
+      const user = JSON.parse(saved);
+      if (user && user.nickname) {
+        state.neteaseUser = user;
+        renderLoginSuccessUI(user);
+        toggleNeteaseGate(true);
+      }
+    }
+  } catch (e) { console.error('Cache load error', e); }
+
+  // 2. Background Validation
   await loadNeteaseConfig();
   renderDownloadTasks();
 }

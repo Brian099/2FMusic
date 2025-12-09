@@ -87,5 +87,6 @@ export const ui = {
   mobileMiniPlay: document.getElementById('mobile-mini-play'),
   menuBtn: document.getElementById('mobile-menu-btn'),
   sidebar: document.getElementById('sidebar'),
+  mobileTitle: document.getElementById('mobile-page-title'),
   tabs: document.querySelectorAll('.tab-btn')
 };

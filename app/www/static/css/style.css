@@ -229,9 +229,24 @@ body::before {
     border: none;
     color: white;
     font-size: 1.5rem;
-    margin-right: 1rem;
+    margin-right: 0.5rem;
+    /* Reduced margin */
     cursor: pointer;
     padding: 0.5rem;
+}
+
+.mobile-title {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: white;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.1s;
+}
+
+.mobile-title:active {
+    transform: scale(0.95);
+    opacity: 0.8;
 }
 
 .search-box {
@@ -358,6 +373,43 @@ body::before {
 /* 特殊处理 header 中的标题，去除下边距 */
 .content-header .section-title {
     margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+
+    /* Generic hiding of text-only titles */
+    .content-header .section-title,
+    .section-title,
+    #view-mount .section-title {
+        display: none !important;
+    }
+
+    /* NetEase: Hide text but KEEP buttons */
+    #netease-content .section-title span {
+        display: none !important;
+    }
+
+    #netease-content .section-title {
+        /* Keep container for buttons, align right */
+        display: flex !important;
+        justify-content: flex-end;
+        margin-bottom: 1rem;
+    }
+
+    /* Mobile Sticky Header Background */
+    .top-bar {
+        background: rgba(15, 12, 41, 0.75);
+        /* Darker glass */
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    /* 移动端恢复顶部 padding */
+    .content-scroll {
+        padding-top: 1rem;
+    }
 }
 
 /* === 歌曲列表 (桌面端优化) === */

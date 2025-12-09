@@ -151,7 +151,10 @@ export function renderPlaylist() {
   if (!ui.songContainer) return;
   ui.songContainer.innerHTML = '';
   if (state.currentTab === 'fav') { state.displayPlaylist = state.fullPlaylist.filter(s => state.favorites.has(s.filename)); } else { state.displayPlaylist = state.fullPlaylist; }
-  if (state.displayPlaylist.length === 0) { ui.songContainer.innerHTML = `<div class="loading" style="grid-column: 1/-1;">${state.currentTab === 'fav' ? '暂无收藏' : '暂无歌曲'}</div>`; return; }
+  if (state.displayPlaylist.length === 0) {
+    ui.songContainer.innerHTML = `<div class="loading-text" style="grid-column: 1/-1; padding: 4rem 0; font-size: 1.1rem; opacity: 0.6;">${state.currentTab === 'fav' ? '暂无收藏歌曲' : '暂无歌曲'}</div>`;
+    return;
+  }
 
   const frag = document.createDocumentFragment();
   state.displayPlaylist.forEach((song, index) => {
@@ -212,7 +215,19 @@ function switchTab(tab) {
     ui.viewNetease?.classList.add('hidden');
     ui.viewPlayer?.classList.remove('hidden');
     renderPlaylist();
+    // Update Desktop Title
+    const titleEl = document.getElementById('list-title');
+    if (titleEl) titleEl.innerText = (tab === 'fav') ? '收藏列表' : '歌曲列表';
   }
+
+  // Update Mobile Title
+  const titles = {
+    'local': '本地音乐',
+    'fav': '我的收藏',
+    'mount': '挂载管理',
+    'netease': '网易下载'
+  };
+  if (ui.mobileTitle) ui.mobileTitle.innerText = titles[tab] || '2FMusic';
 
   // Search Box Visibility: Only for Local Music
   if (ui.searchInput && ui.searchInput.parentElement) {
@@ -591,10 +606,17 @@ export function bindUiControls() {
   });
 
   if (ui.menuBtn) {
-    ui.menuBtn.addEventListener('click', (e) => { e.stopPropagation(); ui.sidebar?.classList.toggle('open'); });
+    const toggleMenu = (e) => { e.stopPropagation(); ui.sidebar?.classList.toggle('open'); };
+    ui.menuBtn.addEventListener('click', toggleMenu);
+    if (ui.mobileTitle) ui.mobileTitle.addEventListener('click', toggleMenu);
+
     document.addEventListener('click', (e) => {
       if (window.innerWidth <= 768 && ui.sidebar?.classList.contains('open')) {
-        if (!ui.sidebar.contains(e.target) && !ui.menuBtn.contains(e.target)) ui.sidebar.classList.remove('open');
+        const outsideSidebar = !ui.sidebar.contains(e.target);
+        const outsideBtn = !ui.menuBtn.contains(e.target);
+        const outsideTitle = !ui.mobileTitle || !ui.mobileTitle.contains(e.target);
+
+        if (outsideSidebar && outsideBtn && outsideTitle) ui.sidebar.classList.remove('open');
       }
     });
   }
