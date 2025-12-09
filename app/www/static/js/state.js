@@ -17,6 +17,7 @@ export const state = {
   neteaseDownloadDir: '',
   neteaseApiBase: '',
   neteaseSelected: new Set(),
+  neteaseUser: JSON.parse(localStorage.getItem('2fmusic_netease_user') || 'null'),
   neteaseDownloadTasks: [],
   isPolling: false,
   progressToastEl: null,

@@ -302,16 +302,31 @@ async function loadNeteaseConfig() {
       if (ui.neteaseApiGateInput) ui.neteaseApiGateInput.value = state.neteaseApiBase || 'http://localhost:3000';
 
       if (state.neteaseApiBase) {
+        // 1. 优先使用缓存状态渲染 UI (SWR 策略)
+        if (state.neteaseUser) {
+          toggleNeteaseGate(true);
+          renderLoginSuccessUI(state.neteaseUser);
+        }
+
+        // 2. 后台验证状态
         try {
           const statusJson = await api.netease.loginStatus();
           if (statusJson.success) {
             toggleNeteaseGate(true);
-            refreshLoginStatus();
+            refreshLoginStatus(); // 这会更新 state.neteaseUser 和 localStorage
           } else {
-            toggleNeteaseGate(false);
+            // 只有明确失败才清除缓存（避免网络抖动导致登录态丢失）
+            if (state.neteaseUser) {
+              // 可选：如果 API 明确返回未登录，才清除
+              // 但为了稳健，这里暂不立刻清除 UI，而是交给 refreshLoginStatus 处理
+              refreshLoginStatus();
+            } else {
+              toggleNeteaseGate(false);
+            }
           }
         } catch (e) {
-          toggleNeteaseGate(false);
+          // 网络错误，保持缓存显示的 UI 不变
+          if (!state.neteaseUser) toggleNeteaseGate(false);
         }
       } else {
         toggleNeteaseGate(false);
@@ -377,19 +392,30 @@ async function bindNeteaseApi() {
   }
 }
 
+function renderLoginSuccessUI(user) {
+  if (ui.neteaseLoginStatus) ui.neteaseLoginStatus.innerText = `已登录：${user.nickname || ''}`;
+  ui.neteaseLoginCard?.classList.remove('status-bad');
+  ui.neteaseLoginCard?.classList.add('status-ok');
+  if (ui.neteaseLoginDesc) ui.neteaseLoginDesc.innerText = '可以开始搜索或下载歌曲';
+  if (ui.neteaseQrImg) ui.neteaseQrImg.src = '';
+  ui.neteaseQrModal?.classList.remove('active');
+}
+
 async function refreshLoginStatus(showToastMsg = false) {
   if (!ui.neteaseLoginStatus) return;
   try {
     const json = await api.netease.loginStatus();
     if (json.success && json.logged_in) {
-      ui.neteaseLoginStatus.innerText = `已登录：${json.nickname || ''}`;
-      ui.neteaseLoginCard?.classList.remove('status-bad');
-      ui.neteaseLoginCard?.classList.add('status-ok');
-      if (ui.neteaseLoginDesc) ui.neteaseLoginDesc.innerText = '可以开始搜索或下载歌曲';
-      if (ui.neteaseQrImg) ui.neteaseQrImg.src = '';
-      ui.neteaseQrModal?.classList.remove('active');
+      const user = { nickname: json.nickname, avatar: json.avatar };
+      state.neteaseUser = user;
+      localStorage.setItem('2fmusic_netease_user', JSON.stringify(user));
+
+      renderLoginSuccessUI(user);
       if (showToastMsg) showToast('网易云已登录');
     } else {
+      state.neteaseUser = null;
+      localStorage.removeItem('2fmusic_netease_user');
+
       ui.neteaseLoginStatus.innerText = json.error || '未登录';
       ui.neteaseLoginCard?.classList.remove('status-ok');
       ui.neteaseLoginCard?.classList.add('status-bad');

@@ -201,19 +201,30 @@ function switchTab(tab) {
     ui.viewPlayer?.classList.add('hidden');
     ui.viewNetease?.classList.add('hidden');
     ui.viewMount?.classList.remove('hidden');
-    if (ui.searchInput) ui.searchInput.parentElement.style.visibility = 'hidden';
     loadMountPoints();
   } else if (tab === 'netease') {
     ui.viewPlayer?.classList.add('hidden');
     ui.viewMount?.classList.add('hidden');
     ui.viewNetease?.classList.remove('hidden');
-    if (ui.searchInput) ui.searchInput.parentElement.style.visibility = 'hidden';
   } else {
+    // local or fav
     ui.viewMount?.classList.add('hidden');
     ui.viewNetease?.classList.add('hidden');
     ui.viewPlayer?.classList.remove('hidden');
-    if (ui.searchInput) { ui.searchInput.parentElement.style.visibility = 'visible'; ui.searchInput.value = ''; }
     renderPlaylist();
+  }
+
+  // Search Box Visibility: Only for Local Music
+  if (ui.searchInput && ui.searchInput.parentElement) {
+    if (tab === 'local') {
+      ui.searchInput.parentElement.style.visibility = 'visible';
+      ui.searchInput.parentElement.style.opacity = '1';
+    } else {
+      ui.searchInput.parentElement.style.visibility = 'hidden';
+      ui.searchInput.parentElement.style.opacity = '0';
+      ui.searchInput.value = ''; // Clear search
+      // Trigger input event to reset list if needed, or just relying on renderPlaylist next time
+    }
   }
   if (window.innerWidth <= 768 && ui.sidebar?.classList.contains('open')) ui.sidebar.classList.remove('open');
   persistState(ui.audio);
