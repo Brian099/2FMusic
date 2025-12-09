@@ -998,7 +998,9 @@ def run_download_task(task_id, payload):
     target_dir = payload.get('target_dir') or NETEASE_DOWNLOAD_DIR
     target_dir = os.path.abspath(target_dir)
     
-    DOWNLOAD_TASKS[task_id]['status'] = 'downloading'
+    target_dir = os.path.abspath(target_dir)
+    
+    DOWNLOAD_TASKS[task_id]['status'] = 'preparing'
 
     try:
         os.makedirs(target_dir, exist_ok=True)
@@ -1046,6 +1048,7 @@ def run_download_task(task_id, payload):
             counter += 1
 
         tmp_path = target_path + ".part"
+        DOWNLOAD_TASKS[task_id]['status'] = 'downloading'
         try:
             with requests.get(download_url, stream=True, timeout=20, headers=COMMON_HEADERS) as resp:
                 resp.raise_for_status()

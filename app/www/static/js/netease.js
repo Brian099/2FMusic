@@ -25,13 +25,22 @@ function renderDownloadTasks() {
     const statusEl = document.createElement('div');
     const config = {
       queued: { icon: 'fas fa-clock', text: '等待中', class: 'status-wait' },
+      preparing: { icon: 'fas fa-spinner fa-spin', text: '准备中', class: 'status-progress' },
       downloading: { icon: 'fas fa-sync fa-spin', text: '下载中', class: 'status-progress' },
       success: { icon: 'fas fa-check', text: '完成', class: 'status-done' },
       error: { icon: 'fas fa-times', text: '失败', class: 'status-error' }
     }[task.status] || { icon: 'fas fa-question', text: '未知', class: '' };
     statusEl.className = `download-status ${config.class}`;
-    if (task.status === 'downloading') {
-      statusEl.innerHTML = `<i class="${config.icon}"></i> <span>${task.progress || 0}%</span>`;
+    if (task.status === 'downloading' || task.status === 'preparing') {
+      const p = task.progress || 0;
+      statusEl.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:flex-end;width:8rem;">
+            <div style="font-size:0.75rem;margin-bottom:0.2rem;opacity:0.8;">${task.status === 'preparing' ? '准备中...' : p + '%'}</div>
+            <div style="width:100%;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
+                <div style="width:${p}%;height:100%;background:var(--primary);transition:width 0.3s;"></div>
+            </div>
+        </div>
+      `;
     } else {
       statusEl.innerHTML = `<i class="${config.icon}"></i> <span>${config.text}</span>`;
     }
@@ -47,6 +56,7 @@ function addDownloadTask(song) {
     id: `dl_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
     title: song.title || `歌曲 ${song.id || ''}`,
     artist: song.artist || '',
+    songId: song.id,
     status: 'queued'
   };
   state.neteaseDownloadTasks.unshift(task);
@@ -113,9 +123,24 @@ function renderNeteaseResults() {
     const actions = document.createElement('div');
     actions.className = 'netease-actions';
     const btn = document.createElement('button');
-    btn.className = 'btn-primary';
-    btn.innerHTML = '<i class="fas fa-download"></i> 下载';
-    btn.addEventListener('click', () => downloadNeteaseSong(song, btn));
+
+    // 检查是否已下载
+    const isDownloaded = state.fullPlaylist && state.fullPlaylist.some(local =>
+      (local.title || '').trim() === (song.title || '').trim() &&
+      (local.artist || '').trim() === (song.artist || '').trim()
+    );
+
+    if (isDownloaded) {
+      btn.className = 'btn-primary';
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-check"></i> 已下载';
+      btn.style.opacity = '0.7';
+      btn.style.cursor = 'default';
+    } else {
+      btn.className = 'btn-primary';
+      btn.innerHTML = '<i class="fas fa-download"></i> 下载';
+      btn.addEventListener('click', () => downloadNeteaseSong(song, btn));
+    }
     actions.appendChild(btn);
 
     card.appendChild(selectWrap);
@@ -131,27 +156,56 @@ function renderNeteaseResults() {
 async function downloadNeteaseSong(song, btnEl) {
   if (!song || !song.id) return;
   const level = ui.neteaseQualitySelect ? ui.neteaseQualitySelect.value : 'exhigh';
+
+  // 检查是否有正在进行的相同任务
+  const existingTask = state.neteaseDownloadTasks.find(t => String(t.songId) === String(song.id) && (t.status === 'preparing' || t.status === 'downloading'));
+  if (existingTask) { showToast('该任务正在进行中'); return; }
+
   const taskId = addDownloadTask(song);
 
   if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-sync fa-spin"></i> 请求中'; }
+
+  // 自动展开下载列表
+  if (ui.neteaseDownloadPanel && ui.neteaseDownloadPanel.classList.contains('hidden')) {
+    ui.neteaseDownloadPanel.classList.remove('hidden');
+  }
 
   try {
     const res = await api.netease.download({ ...song, level, target_dir: state.neteaseDownloadDir || undefined });
     if (res.success) {
       const backendTaskId = res.task_id;
-      updateDownloadTask(taskId, 'downloading');
+      updateDownloadTask(taskId, 'preparing');
+
+      // 保持按钮状态直到下载结束
+      if (btnEl) {
+        btnEl.disabled = true;
+        // 清除 finally 中的恢复逻辑，改为手动恢复
+      }
 
       // 轮询进度
+      let failCount = 0;
       const pollTimer = setInterval(async () => {
         try {
           const taskRes = await api.netease.task(backendTaskId);
           if (taskRes.success) {
+            failCount = 0; // 重置错误计数
             const tData = taskRes.data;
             const currentTask = state.neteaseDownloadTasks.find(t => t.id === taskId);
+
+            // 更新按钮进度
+            if (btnEl) {
+              if (tData.status === 'downloading') {
+                btnEl.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ${tData.progress}%`;
+              } else if (tData.status === 'preparing') {
+                btnEl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 准备...`;
+              }
+            }
+
             if (currentTask) {
               // 状态映射
               let newStatus = tData.status;
               if (newStatus === 'pending') newStatus = 'queued';
+              if (newStatus === 'preparing') newStatus = 'preparing';
 
               currentTask.status = newStatus;
               currentTask.progress = tData.progress;
@@ -159,6 +213,24 @@ async function downloadNeteaseSong(song, btnEl) {
 
               if (newStatus === 'success' || newStatus === 'error') {
                 clearInterval(pollTimer);
+                if (btnEl) {
+                  btnEl.disabled = false;
+                  btnEl.innerHTML = newStatus === 'success' ? '<i class="fas fa-check"></i> 完成' : '<i class="fas fa-redo"></i> 重试';
+                  // 3秒后恢复默认文字或切换为已下载
+                  setTimeout(() => {
+                    if (btnEl.innerHTML.includes('重试')) {
+                      btnEl.innerHTML = '<i class="fas fa-download"></i> 下载';
+                    } else if (btnEl.innerHTML.includes('完成')) {
+                      // 成功后变为已下载状态
+                      btnEl.className = 'btn-primary';
+                      btnEl.disabled = true;
+                      btnEl.innerHTML = '<i class="fas fa-check"></i> 已下载';
+                      btnEl.style.opacity = '0.7';
+                      btnEl.style.cursor = 'default';
+                    }
+                  }, 3000);
+                }
+
                 if (newStatus === 'success') {
                   showToast(`下载完成: ${tData.title}`);
                   if (songRefreshCallback) songRefreshCallback();
@@ -167,20 +239,35 @@ async function downloadNeteaseSong(song, btnEl) {
                 }
               }
             } else {
-              clearInterval(pollTimer);
+              clearInterval(pollTimer); // 任务在前端被移除了
             }
+          } else {
+            // 任务在后端不存在 (可能因为重启丢失)
+            updateDownloadTask(taskId, 'error');
+            clearInterval(pollTimer);
+            showToast('任务已失效 (服务器可能已重启)');
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-redo"></i> 重试'; }
           }
-        } catch (e) { console.error(e); }
-      }, 1000);
+        } catch (e) {
+          console.error(e);
+          failCount++;
+          if (failCount > 10) { // 连续失败2秒
+            clearInterval(pollTimer);
+            updateDownloadTask(taskId, 'error');
+            showToast('网络连接丢失，停止轮询');
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-redo"></i> 重试'; }
+          }
+        }
+      }, 200);
 
     } else {
       updateDownloadTask(taskId, 'error');
       showToast(res.error || '请求失败');
+      if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-download"></i> 下载'; }
     }
   } catch (err) {
     console.error('download netease error', err);
     updateDownloadTask(taskId, 'error');
-  } finally {
     if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-download"></i> 下载'; }
   }
 }
