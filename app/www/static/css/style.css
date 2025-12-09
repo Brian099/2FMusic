@@ -1755,6 +1755,46 @@ input[type=range]::-webkit-slider-thumb {
     padding: 0.5rem;
 }
 
+.netease-download-row {
+    padding: 0.8rem;
+    border-radius: 0.6rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s ease;
+}
+.netease-download-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.netease-download-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    margin-right: 1rem;
+}
+.netease-download-meta .title {
+    font-size: 0.9rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.netease-download-meta .artist {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+.download-status {
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.download-status.status-wait { color: rgba(255,255,255,0.65); }
+.download-status.status-progress { color: var(--primary); }
+.download-status.status-done { color: #43d9ad; }
+.download-status.status-error { color: #ff8080; }
+
 .download-item {
     padding: 0.8rem;
     border-radius: 0.6rem;
