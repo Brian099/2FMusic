@@ -52,9 +52,9 @@ for encoding in ['UTF-8', 'utf-8', 'en_US.UTF-8', 'zh_CN.UTF-8']:
 
 # --- 参数解析 ---
 parser = argparse.ArgumentParser(description='2FMusic Server')
-parser.add_argument('--music-library-path', type=str, help='Path to music library')
-parser.add_argument('--log-path', type=str, help='Path to log file')
-parser.add_argument('--port', type=int, default=8080, help='Server port')
+parser.add_argument('--music-library-path', type=str, default=os.environ.get('MUSIC_LIBRARY_PATH'), help='Path to music library')
+parser.add_argument('--log-path', type=str, default=os.environ.get('LOG_PATH'), help='Path to log file')
+parser.add_argument('--port', type=int, default=int(os.environ.get('PORT', 23237)), help='Server port')
 args = parser.parse_args()
 
 # --- 路径初始化 ---
