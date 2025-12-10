@@ -105,6 +105,10 @@ export const api = {
       const res = await fetch(`/api/netease/login/check?key=${encodeURIComponent(key)}`);
       return jsonOrThrow(res);
     },
+    async logout() {
+      const res = await fetch('/api/netease/logout', { method: 'POST' });
+      return jsonOrThrow(res);
+    },
     async playlist(id) {
       const res = await fetch(`/api/netease/playlist?id=${encodeURIComponent(id)}`);
       return jsonOrThrow(res);

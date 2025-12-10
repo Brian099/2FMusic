@@ -21,26 +21,43 @@ export const ui = {
   navUpload: document.getElementById('nav-upload'),
   fileUpload: document.getElementById('file-upload'),
 
-  neteaseKeywordsInput: document.getElementById('netease-keywords'),
+  neteaseKeywordsInput: document.getElementById('netease-global-input'),
+  neteaseSearchBtn: document.getElementById('netease-global-search-btn'),
+  neteaseUserDisplay: document.getElementById('netease-user-display'),
+  neteaseUserAvatar: document.getElementById('netease-user-avatar'),
+  neteaseUserName: document.getElementById('netease-user-name'),
+  neteaseUserMenu: document.getElementById('netease-user-menu'),
+  neteaseMenuSettings: document.getElementById('netease-menu-settings'),
+  neteaseMenuLogout: document.getElementById('netease-menu-logout'),
+  neteaseLoginBtnTop: document.getElementById('netease-login-btn-top'),
+  neteaseSettingsBtn: document.getElementById('netease-settings-btn'),
+  neteaseSettingsModal: document.getElementById('netease-settings-modal'),
+  neteaseCloseSettingsBtn: document.getElementById('netease-close-settings'),
+
   neteaseQualitySelect: document.getElementById('netease-quality'),
-  neteaseSearchBtn: document.getElementById('netease-search-btn'),
   neteaseResultList: document.getElementById('netease-result-list'),
-  neteaseLoginStatus: document.getElementById('netease-login-status'),
-  neteaseLoginCard: document.getElementById('netease-login-card'),
-  neteaseLoginDesc: document.getElementById('netease-login-desc'),
-  neteaseLoginBtn: document.getElementById('netease-login-btn'),
-  neteaseRefreshStatusBtn: document.getElementById('netease-refresh-status'),
+  // Removed old login card/status elements mapping as they don't exist in same form, 
+  // but keeping variables to avoid crash if referenced (will be null)
+  neteaseLoginStatus: null,
+  neteaseLoginCard: null,
+  neteaseLoginDesc: null,
+  neteaseLoginBtn: null, // Old button
+  neteaseRefreshStatusBtn: null,
+
   neteaseQrImg: document.getElementById('netease-qr-img'),
   neteaseQrModal: document.getElementById('netease-qr-modal'),
   closeQrModalBtn: document.getElementById('close-qr-modal'),
   neteaseQrHint: document.getElementById('netease-qr-hint'),
-  neteaseLinkInput: document.getElementById('netease-link-input'),
-  neteaseIdDownloadBtn: document.getElementById('netease-link-parse'),
+
+  neteaseLinkInput: null, // Merged
+  neteaseIdDownloadBtn: null, // Merged
   neteaseDownloadDirInput: document.getElementById('netease-download-dir'),
   neteaseSelectAll: document.getElementById('netease-select-all'),
   neteaseBulkDownloadBtn: document.getElementById('netease-bulk-download'),
+  neteaseBulkActions: document.getElementById('netease-bulk-actions'),
 
   neteaseApiGateInput: document.getElementById('netease-api-gate-input'),
+  neteaseApiSettingsInput: document.getElementById('netease-api-settings-input'),
   neteaseApiGateBtn: document.getElementById('netease-api-gate-btn'),
   neteaseChangeApiBtn: document.getElementById('netease-change-api'),
 
