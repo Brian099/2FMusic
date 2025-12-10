@@ -1000,6 +1000,10 @@ input[type=range]::-webkit-slider-thumb {
     transition: opacity 0.3s;
 }
 
+.custom-overlay.centered {
+    align-items: center;
+}
+
 .custom-overlay.active {
     opacity: 1;
     pointer-events: auto;
@@ -2405,7 +2409,7 @@ select:focus {
 .netease-result-list {
     display: flex;
     flex-direction: column;
-    gap: 0.8rem;
+    gap: 1.1rem;
     padding: 0.5rem 0;
     /* Remove side padding as we removed the container bg */
 }
@@ -2854,6 +2858,7 @@ select:focus {
     box-shadow: 0 4px 15px rgba(214, 48, 49, 0.3);
 }
 
+
 /* Mobile Optimizations for Toasts */
 @media (max-width: 768px) {
     #toast-container {
@@ -2866,6 +2871,7 @@ select:focus {
 /* Mobile optimizations for top spacing */
 @media (max-width: 768px) {
 
+
     /* Hide header completely for Favorites tab to remove gap */
     .tab-fav .content-header {
         display: none !important;
@@ -2877,10 +2883,328 @@ select:focus {
     }
 }
 
+
 /* Override for NetEase path row with label */
 .netease-path-row {
     grid-template-columns: auto 1fr auto !important;
     align-items: center;
+}
+
+/* === New NetEase Page Styles === */
+.netease-container-new {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    /* padding: 0 1rem; Remove padding to align with content-scroll */
+}
+
+/* Header */
+.netease-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* padding: 1rem 0.5rem; Remove padding to align with standard headers */
+    margin-bottom: 1.5rem;
+    /* Match content-header margin */
+    min-height: 2.5rem;
+    /* Ensure some height consistency */
+    position: relative;
+    z-index: 400;
+}
+
+.netease-title-large {
+    font-size: 1.5rem;
+    /* Match .section-title */
+    font-weight: bold;
+    color: white;
+    /* letter-spacing: 0.05rem; Remove distinct spacing */
+}
+
+.netease-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* User Display */
+.netease-user-display {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+    border-radius: 2rem;
+    backdrop-filter: blur(10px);
+    transition: 0.2s;
+    position: relative;
+    cursor: pointer;
+    z-index: 500;
+}
+
+.netease-user-display.hidden {
+    display: none;
+}
+
+.user-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.2;
+}
+
+.user-name {
+    font-size: 0.9rem;
+    font-weight: bold;
+    max-width: 8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-tag {
+    font-size: 0.65rem;
+    background: #FFD700;
+    color: #333;
+    padding: 0 0.3rem;
+    border-radius: 0.2rem;
+    font-weight: bold;
+    display: none;
+    /* Hide for now unless we have VIP status */
+}
+
+#netease-user-avatar {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.user-dropdown-caret {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.netease-user-menu {
+    position: absolute;
+    top: 110%;
+    right: 0;
+    min-width: 9rem;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.8rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 600;
+}
+
+.netease-user-menu.hidden {
+    display: none;
+}
+
+.netease-user-menu .menu-btn {
+    background: transparent;
+    color: white;
+    border: none;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.netease-user-menu .menu-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.netease-user-menu .menu-btn.danger {
+    color: #ff7b7b;
+}
+
+.netease-user-menu .menu-btn.danger:hover {
+    background: rgba(255, 71, 87, 0.1);
+}
+
+.btn-primary-small {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: 1.5rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-primary-small:hover {
+    transform: scale(1.05);
+}
+
+
+.netease-search-hero {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+    width: 100%;
+}
+
+/* Reuse .search-box but override for hero size */
+.netease-search-hero .search-box {
+    width: 100%;
+    max-width: 50rem;
+    height: 3rem;
+    /* Slightly larger than standard */
+}
+
+.netease-search-hero .search-box:focus-within {
+    width: 100%;
+    max-width: 52rem;
+}
+
+#netease-global-search-btn:hover {
+    background: var(--primary);
+}
+
+/* Results Area */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.section-subtitle {
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: bold;
+}
+
+.netease-bulk-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    margin-top: 0;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.8rem;
+    padding: 0.75rem 1.5rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.netease-bulk-actions .btn-mini {
+    background: #8c7ae6;
+    /* Purple accent */
+    border-radius: 2rem;
+    /* Pill shape */
+    padding: 0.5rem 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.netease-bulk-actions .btn-mini:hover {
+    background: #9c88ff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(140, 122, 230, 0.3);
+}
+
+.netease-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.btn-mini {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.3rem 0.8rem;
+    border-radius: 0.3rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+/* Empty State */
+.netease-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 0;
+    opacity: 0.5;
+}
+
+.empty-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.1rem;
+}
+
+.empty-desc {
+    font-size: 1rem;
+}
+
+/* Settings Modal */
+.settings-box {
+    width: 90%;
+    max-width: 25rem;
+    padding: 2rem;
+    border-radius: 1rem;
+}
+
+.setting-row {
+    margin-bottom: 1.5rem;
+}
+
+.setting-row label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+.setting-row select,
+.setting-row input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 0.6rem;
+    border-radius: 0.4rem;
+}
+
+.setting-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+}
+
+.btn-danger-text {
+    background: none;
+    border: none;
+    color: #ff4d4d;
+    cursor: pointer;
+    font-size: 0.9rem;
 }
 
 /* === 移动端歌词最终修正适配 (放在最后确保优先级) === */

@@ -159,20 +159,29 @@
                         </div>
 
                     </div>
-                    <div id="netease-content">
-                        <div class="section-title"
-                            style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
-                            <span>网易云下载</span>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <button id="netease-change-api" class="icon-btn" title="切换API">
-                                    <i class="fas fa-plug"></i>
-                                </button>
-                                <button id="netease-download-floating" class="icon-btn" title="下载管理">
-                                    <i class="fas fa-tasks"></i>
-                                </button>
+                    <div class="netease-container-new" id="netease-content">
+                        <header class="netease-header">
+                            <div class="netease-title-large">网易云下载</div>
+                            <div class="netease-header-right">
+                                <div id="netease-user-display" class="netease-user-display hidden">
+                                    <div class="user-text">
+                                        <div id="netease-user-name" class="user-name">User</div>
+                                        <div class="user-tag">VIP</div>
+                                    </div>
+                                    <i class="fas fa-chevron-down user-dropdown-caret"></i>
+                                    <img id="netease-user-avatar" src="" alt="Avatar">
+                                    <div class="netease-user-menu hidden" id="netease-user-menu">
+                                        <button id="netease-menu-settings" class="menu-btn"><i class="fas fa-cog"></i> 设置</button>
+                                        <button id="netease-menu-logout" class="menu-btn danger"><i class="fas fa-sign-out-alt"></i> 退出登录</button>
+                                    </div>
+                                </div>
+                                <button id="netease-login-btn-top" class="btn-primary-small">登录</button>
+                                <button id="netease-download-floating" class="icon-btn" title="下载管理"><i
+                                        class="fas fa-tasks"></i></button>
                             </div>
-                        </div>
+                        </header>
 
+                        <!-- Download Panel (Overlay) -->
                         <div class="netease-download-panel hidden" id="netease-download-panel">
                             <div class="netease-download-header">
                                 <div>
@@ -186,79 +195,54 @@
                             </div>
                         </div>
 
-                        <div class="glass-panel netease-search-box">
-                            <!-- Status Section -->
-                            <div class="netease-status-section">
-                                <div class="netease-status-card status-bad" id="netease-login-card">
-                                    <div class="netease-login-row">
-                                        <div class="netease-status-text">
-                                            <div class="netease-status" id="netease-login-status">正在检查...</div>
-                                            <div class="netease-status-desc" id="netease-login-desc">请扫码登录网易云账号</div>
-                                        </div>
-                                        <div class="netease-actions-inline">
-                                            <button id="netease-login-btn" class="btn-primary"><i
-                                                    class="fas fa-qrcode"></i> 登录</button>
-                                            <button id="netease-refresh-status" class="btn-normal" title="刷新状态"><i
-                                                    class="fas fa-sync"></i></button>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="netease-search-hero">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="netease-global-input" placeholder="搜索全网歌曲或粘贴链接/ID (Enter搜索)">
+                            </div>
+                        </div>
+
+                        <div class="netease-results-area">
+                            <div class="section-header-row">
+                                <div class="section-subtitle">搜索结果</div>
                             </div>
 
-                            <!-- Tabs -->
-                            <div class="netease-tabs">
-                                <button class="tab-btn active" data-target="tab-search">关键词搜索</button>
-                                <button class="tab-btn" data-target="tab-id">链接解析</button>
-                                <button class="tab-btn" data-target="tab-settings">保存位置</button>
+                            <div class="netease-bulk-actions hidden" id="netease-bulk-actions">
+                                <label class="netease-check">
+                                    <input type="checkbox" id="netease-select-all">
+                                    <span>全选</span>
+                                </label>
+                                <button id="netease-bulk-download" class="btn-mini"><i class="fas fa-download"></i>
+                                    下载选中</button>
                             </div>
 
-                            <!-- Tab: Search -->
-                            <div class="tab-content active" id="tab-search">
-                                <div class="netease-search-row">
-                                    <input type="text" id="netease-keywords" placeholder="输入歌曲或歌手关键词...">
-                                    <select id="netease-quality">
-                                        <option value="exhigh">高品质</option>
-                                        <option value="lossless">无损</option>
-                                        <option value="standard">标准</option>
-                                    </select>
-                                    <button id="netease-search-btn" class="btn-primary"><i class="fas fa-search"></i>
-                                        搜索</button>
-                                </div>
-                            </div>
-
-                            <!-- Tab: ID -->
-                            <div class="tab-content" id="tab-id">
-                                <div class="netease-id-row">
-                                    <input type="text" id="netease-link-input" placeholder="粘贴网易云分享链接或ID（支持短链）">
-                                    <button id="netease-link-parse" class="btn-primary"><i class="fas fa-search"></i>
-                                        解析</button>
-                                </div>
-                                <!-- <div class="loading-text" style="text-align:left;opacity:0.7;padding:0 0.4rem;">
-                                    支持单曲、歌单长链或 163cn.tv 短链，自动识别类型
-                                </div> -->
-                            </div>
-
-                            <!-- Tab: Settings -->
-                            <div class="tab-content" id="tab-settings">
-                                <div class="netease-path-row">
-                                    <input type="text" id="netease-download-dir" placeholder="下载保存目录（默认音乐库）">
-                                    <button id="netease-save-dir" class="btn-normal"><i class="fas fa-save"></i>
-                                        保存设置</button>
+                            <div id="netease-result-list" class="netease-result-list">
+                                <!-- Empty State -->
+                                <div class="netease-empty-state">
+                                    <div class="empty-title">等待搜索...</div>
+                                    <div class="empty-desc">请输入关键词开始</div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="section-subtitle">搜索结果</div>
-                        <div class="netease-bulk-row">
-                            <label class="netease-check">
-                                <input type="checkbox" id="netease-select-all">
-                                <span>全选</span>
-                            </label>
-                            <button id="netease-bulk-download" class="btn-primary"><i class="fas fa-download"></i>
-                                下载选中</button>
-                        </div>
-                        <div id="netease-result-list" class="netease-result-list">
-                            <div class="loading-text">等待搜索...</div>
+                        <!-- Hidden Settings Modal/Panel (Triggered by settings button) -->
+                        <div id="netease-settings-modal" class="custom-overlay centered hidden">
+                            <div class="glass-panel settings-box">
+                                <h3>网易云设置</h3>
+                                <div class="setting-row">
+                                    <label>API 地址</label>
+                                    <input type="text" id="netease-api-settings-input" placeholder="http://localhost:23236">
+                                </div>
+                                <div class="setting-row">
+                                    <label>保存目录</label>
+                                    <input type="text" id="netease-download-dir" placeholder="下载保存目录">
+                                </div>
+                                <div class="setting-actions">
+                                    <button id="netease-save-dir" class="btn-primary">保存设置</button>
+                                    <button id="netease-change-api" class="btn-danger-text">断开 API 连接</button>
+                                    <button id="netease-close-settings" class="btn-primary">关闭</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -377,7 +361,7 @@
             </div>
         </div>
 
-        <div id="netease-qr-modal" class="custom-overlay">
+        <div id="netease-qr-modal" class="custom-overlay centered">
             <div class="qr-box glass-panel">
                 <h3>扫码登录网易云</h3>
                 <div class="netease-qr-box">

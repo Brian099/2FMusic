@@ -612,10 +612,29 @@ def parse_cookie_string(cookie_str: str):
     return cookies
 
 def normalize_cookie_string(raw: str) -> str:
-    """规范化 cookie 字符串，移除换行并用分号拼接。"""
+    """规范化 cookie 字符串，移除换行并过滤非关键属性。"""
     if not raw: 
         return ''
-    parts = [p.strip() for p in raw.replace('\n', ';').split(';') if p.strip()]
+    parts = []
+    # 常见的 Set-Cookie 属性，不应出现在请求头 Cookie 中
+    skip_keys = ('path', 'expires', 'max-age', 'domain', 'samesite', 'secure', 'httponly')
+    
+    for part in raw.replace('\n', ';').split(';'):
+        part = part.strip()
+        if not part: continue
+        
+        # 忽略没有等号的属性 (如 Secure, HttpOnly)
+        if '=' not in part: 
+            # 但有些 cookie 值可能就是没有等号？不太可能，标准cookie都是 k=v
+            # 如果是 Secure/HttpOnly 这种flag，肯定要忽略
+            continue
+            
+        k, v = part.split('=', 1)
+        if k.strip().lower() in skip_keys:
+            continue
+            
+        parts.append(part)
+        
     return '; '.join(parts)
 
 def load_netease_cookie():
@@ -727,13 +746,26 @@ def _resolve_netease_input(raw: str, prefer: str = None):
     # 链接补全 scheme
     if candidate.startswith(('music.163.com', 'y.music.163.com', '163cn.tv')):
         candidate = f"https://{candidate}"
-    # 跟随短链跳转获取真实地址
+    # 跟随短链跳转获取真实地址，兼容 163cn.tv
     if re.match(r'^https?://', candidate, re.I):
-        try:
-            with requests.get(candidate, allow_redirects=True, timeout=8, headers=COMMON_HEADERS, stream=True) as resp:
-                candidate = resp.url or candidate
-        except Exception as e:
-            logger.warning(f"网易云链接解析失败: {e}")
+        def _follow(url):
+            try:
+                resp = requests.get(url, allow_redirects=True, timeout=8, headers=COMMON_HEADERS)
+                return resp.url or url
+            except Exception as e:
+                logger.warning(f"网易云链接解析失败: {e}")
+                return None
+
+        followed = _follow(candidate)
+        # 针对 163cn.tv 短链再尝试一次 HEAD，避免部分环境 GET 被拦截
+        if not followed and '163cn.tv' in candidate:
+            try:
+                resp = requests.head(candidate, allow_redirects=True, timeout=6, headers=COMMON_HEADERS)
+                followed = resp.url or resp.headers.get('Location')
+            except Exception as e:
+                logger.warning(f"网易云短链 HEAD 解析失败: {e}")
+        if followed:
+            candidate = followed
 
     def extract_from_url(url_str: str):
         parsed = urlparse(url_str)
@@ -1028,11 +1060,32 @@ def netease_login_status():
         api_resp = call_netease_api('/login/status', {'timestamp': int(time.time() * 1000)}, need_cookie=True)
         profile = api_resp.get('data', {}).get('profile') if isinstance(api_resp, dict) else None
         if profile:
-            return jsonify({'success': True, 'logged_in': True, 'nickname': profile.get('nickname'), 'user_id': profile.get('userId')})
+            return jsonify({
+                'success': True,
+                'logged_in': True,
+                'nickname': profile.get('nickname'),
+                'user_id': profile.get('userId'),
+                'avatar': profile.get('avatarUrl')
+            })
         return jsonify({'success': True, 'logged_in': False, 'error': '未登录'})
     except Exception as e:
         logger.warning(f"检查网易云登录状态失败: {e}")
         return jsonify({'success': False, 'error': '状态检查失败'})
+
+@app.route('/api/netease/logout', methods=['POST'])
+def netease_logout():
+    """退出登录并清空本地保存的网易云 cookie。"""
+    try:
+        if NETEASE_COOKIE:
+            try:
+                call_netease_api('/logout', {'timestamp': int(time.time() * 1000)}, need_cookie=True)
+            except Exception as e:
+                logger.info(f"网易云 API 注销调用失败，继续清理本地 cookie: {e}")
+        save_netease_cookie('')
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.warning(f"网易云退出登录失败: {e}")
+        return jsonify({'success': False, 'error': '退出失败'})
 
 @app.route('/api/netease/login/qrcode')
 def netease_login_qrcode():
@@ -1064,6 +1117,11 @@ def netease_login_check():
         cookie_str = resp.get('cookie')
         if not cookie_str and isinstance(resp.get('cookies'), list):
             cookie_str = '; '.join(resp.get('cookies'))
+        
+        # Debug Log
+        if code == 803:
+            logger.info(f"扫码成功 (803). Raw cookie: {bool(cookie_str)}, Length: {len(cookie_str) if cookie_str else 0}")
+            
         if code == 803 and cookie_str:
             save_netease_cookie(cookie_str)
             return jsonify({'success': True, 'status': 'authorized', 'message': message})
@@ -1417,6 +1475,6 @@ if __name__ == '__main__':
     logger.info(f"服务启动，端口: {args.port} ...")
     try:
         init_db()
-        app.run(host='0.0.0.0', port=args.port, threaded=True)
+        app.run(host='0.0.0.0', port=args.port, threaded=True, use_reloader=False)
     except Exception as e:
         logger.exception(f"服务启动失败: {e}")

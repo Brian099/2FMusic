@@ -82,11 +82,18 @@ function updateSelectAllState() {
   }
 }
 
+function toggleBulkActions(visible) {
+  if (ui.neteaseBulkActions) {
+    ui.neteaseBulkActions.classList.toggle('hidden', !visible);
+  }
+}
+
 function renderNeteaseResults() {
   const list = ui.neteaseResultList;
   if (!list) return;
   if (!state.neteaseResults.length) {
     list.innerHTML = '<div class="loading-text">未找到相关歌曲</div>';
+    toggleBulkActions(false);
     updateSelectAllState();
     return;
   }
@@ -150,6 +157,7 @@ function renderNeteaseResults() {
     frag.appendChild(card);
   });
   list.appendChild(frag);
+  toggleBulkActions(true);
   updateSelectAllState();
 }
 
@@ -274,21 +282,59 @@ async function downloadNeteaseSong(song, btnEl) {
 
 async function searchNeteaseSongs() {
   if (!ui.neteaseKeywordsInput) return;
-  const keywords = ui.neteaseKeywordsInput.value.trim();
-  if (!keywords) { showToast('请输入关键词'); return; }
-  if (ui.neteaseResultList) ui.neteaseResultList.innerHTML = '<div class="loading-text">搜索中...</div>';
+  const inputVal = ui.neteaseKeywordsInput.value.trim();
+  if (!inputVal) { showToast('请输入关键词或链接'); return; }
+
+  // Clear previous results and show loading
+  if (ui.neteaseResultList) {
+    ui.neteaseResultList.innerHTML = `
+          <div class="netease-empty-state" style="opacity:0.8; padding: 2rem;">
+              <div class="loading-spinner" style="width:2rem;height:2rem;margin-bottom:1rem;"></div>
+              <div class="loading-text">正在搜索...</div>
+          </div>
+      `;
+  }
+  toggleBulkActions(false);
+
+  // Detect if Input is a Link (Simple check)
+  const isLink = inputVal.includes('music.163.com') || inputVal.includes('http') || inputVal.match(/^\d{5,}$/);
+
   try {
-    const json = await api.netease.search(keywords);
-    if (json.success) {
+    if (isLink) {
+      // Resolve Link
+      const json = await api.netease.resolve(inputVal);
+      if (!json.success) {
+        ui.neteaseResultList.innerHTML = `<div class="loading-text">${json.error || '解析失败'}</div>`;
+        return;
+      }
       state.neteaseResults = json.data || [];
+      state.neteaseSelected = new Set(state.neteaseResults.map(s => String(s.id))); // Auto-select all for playlists? Maybe not.
+      // Let's not auto select all for links unless it's a playlist. 
+      // But the old behavior was auto select. Let's keep empty selection for consistency.
       state.neteaseSelected = new Set();
       renderNeteaseResults();
+
+      const msg = json.type === 'playlist'
+        ? `已解析歌单${json.name ? `：${json.name}` : ''}（${state.neteaseResults.length} 首）`
+        : `解析到 ${state.neteaseResults.length} 首歌曲`;
+      showToast(msg);
+
     } else {
-      ui.neteaseResultList.innerHTML = `<div class="loading-text">${json.error || '搜索失败'}</div>`;
+      // Keyword Search
+      const json = await api.netease.search(inputVal);
+      if (json.success) {
+        state.neteaseResults = json.data || [];
+        state.neteaseSelected = new Set();
+        renderNeteaseResults();
+      } else {
+        ui.neteaseResultList.innerHTML = `<div class="loading-text">${json.error || '搜索失败'}</div>`;
+        toggleBulkActions(false);
+      }
     }
   } catch (err) {
     console.error('NetEase search failed', err);
     if (ui.neteaseResultList) ui.neteaseResultList.innerHTML = '<div class="loading-text">搜索失败，请检查 API 服务</div>';
+    toggleBulkActions(false);
   }
 }
 
@@ -301,6 +347,7 @@ async function loadNeteaseConfig() {
       if (json.api_base) apiBase = json.api_base;
       state.neteaseDownloadDir = json.download_dir || '';
       if (ui.neteaseDownloadDirInput) ui.neteaseDownloadDirInput.value = state.neteaseDownloadDir;
+      if (ui.neteaseApiSettingsInput) ui.neteaseApiSettingsInput.value = apiBase;
     }
   } catch (err) {
     console.warn('Config load failed, utilizing default:', err);
@@ -309,6 +356,7 @@ async function loadNeteaseConfig() {
   // Update State & UI
   state.neteaseApiBase = apiBase;
   if (ui.neteaseApiGateInput) ui.neteaseApiGateInput.value = apiBase;
+  if (ui.neteaseApiSettingsInput) ui.neteaseApiSettingsInput.value = apiBase;
 
   // Auto-Connect Attempt
   try {
@@ -332,7 +380,9 @@ async function loadNeteaseConfig() {
 
 async function saveNeteaseConfig() {
   const dir = ui.neteaseDownloadDirInput ? ui.neteaseDownloadDirInput.value.trim() : '';
-  const apiBaseVal = ui.neteaseApiGateInput ? ui.neteaseApiGateInput.value.trim() : state.neteaseApiBase;
+  const apiBaseVal = ui.neteaseApiSettingsInput
+    ? ui.neteaseApiSettingsInput.value.trim()
+    : (ui.neteaseApiGateInput ? ui.neteaseApiGateInput.value.trim() : state.neteaseApiBase);
   const payload = {};
   if (dir || state.neteaseDownloadDir) payload.download_dir = dir || state.neteaseDownloadDir;
   if (apiBaseVal) payload.api_base = apiBaseVal;
@@ -343,6 +393,7 @@ async function saveNeteaseConfig() {
       state.neteaseDownloadDir = json.download_dir;
       state.neteaseApiBase = json.api_base || '';
       if (ui.neteaseApiGateInput) ui.neteaseApiGateInput.value = state.neteaseApiBase || 'http://localhost:23236';
+      if (ui.neteaseApiSettingsInput) ui.neteaseApiSettingsInput.value = state.neteaseApiBase || 'http://localhost:23236';
       toggleNeteaseGate(!!state.neteaseApiBase);
       showToast('保存成功');
     } else {
@@ -365,6 +416,7 @@ async function bindNeteaseApi() {
     const json = await api.netease.configSave(payload);
     if (json.success) {
       state.neteaseApiBase = json.api_base;
+      if (ui.neteaseApiSettingsInput) ui.neteaseApiSettingsInput.value = state.neteaseApiBase || '';
       const statusJson = await api.netease.loginStatus();
       if (statusJson.success) {
         showToast('连接成功');
@@ -384,18 +436,37 @@ async function bindNeteaseApi() {
   }
 }
 
+
+function toggleLoginUI(isLoggedIn) {
+  if (ui.neteaseUserDisplay) {
+    if (isLoggedIn) ui.neteaseUserDisplay.classList.remove('hidden');
+    else ui.neteaseUserDisplay.classList.add('hidden');
+  }
+  if (!isLoggedIn && ui.neteaseUserMenu) {
+    ui.neteaseUserMenu.classList.add('hidden');
+  }
+  if (ui.neteaseLoginBtnTop) {
+    if (isLoggedIn) ui.neteaseLoginBtnTop.classList.add('hidden');
+    else ui.neteaseLoginBtnTop.classList.remove('hidden');
+  }
+}
+
 function renderLoginSuccessUI(user) {
-  if (ui.neteaseLoginStatus) ui.neteaseLoginStatus.innerText = `已登录：${user.nickname || ''}`;
-  ui.neteaseLoginCard?.classList.remove('status-bad');
-  ui.neteaseLoginCard?.classList.add('status-ok');
-  if (ui.neteaseLoginDesc) ui.neteaseLoginDesc.innerText = '可以开始搜索或下载歌曲';
+  // Update Header User Display
+  toggleLoginUI(true);
+
+  if (ui.neteaseUserDisplay) {
+    if (ui.neteaseUserName) ui.neteaseUserName.innerText = user.nickname || '用户';
+    if (ui.neteaseUserAvatar) ui.neteaseUserAvatar.src = user.avatar || '';
+  }
+
+  // Close QR Modal if open
   if (ui.neteaseQrImg) ui.neteaseQrImg.src = '';
   ui.neteaseQrModal?.classList.remove('active');
-  if (ui.neteaseLoginBtn) ui.neteaseLoginBtn.style.display = 'none';
+  if (ui.neteaseUserMenu) ui.neteaseUserMenu.classList.add('hidden');
 }
 
 async function refreshLoginStatus(showToastMsg = false) {
-  if (!ui.neteaseLoginStatus) return;
   try {
     const json = await api.netease.loginStatus();
     if (json.success && json.logged_in) {
@@ -409,12 +480,9 @@ async function refreshLoginStatus(showToastMsg = false) {
       state.neteaseUser = null;
       localStorage.removeItem('2fmusic_netease_user');
 
-      ui.neteaseLoginStatus.innerText = json.error || '未登录';
-      ui.neteaseLoginCard?.classList.remove('status-ok');
-      ui.neteaseLoginCard?.classList.add('status-bad');
-      ui.neteaseLoginCard?.classList.add('status-bad');
-      if (ui.neteaseLoginDesc) ui.neteaseLoginDesc.innerText = '请扫码登录网易云账号';
-      if (ui.neteaseLoginBtn) ui.neteaseLoginBtn.style.display = '';
+      // Update UI for logged out state
+      toggleLoginUI(false);
+
       if (showToastMsg) showToast(json.error || '未登录');
     }
   } catch (err) {
@@ -432,9 +500,7 @@ async function startNeteaseLogin() {
     if (ui.neteaseQrImg) ui.neteaseQrImg.src = json.qrimg;
     ui.neteaseQrModal?.classList.add('active');
     if (ui.neteaseQrHint) ui.neteaseQrHint.innerText = '使用网易云音乐扫码';
-    if (ui.neteaseLoginStatus) ui.neteaseLoginStatus.innerText = '等待扫码...';
-    ui.neteaseLoginCard?.classList.remove('status-ok');
-    ui.neteaseLoginCard?.classList.add('status-bad');
+    // Removed old status updates
     state.neteasePollingTimer = setInterval(checkLoginStatus, 800);
   } catch (err) {
     console.error('login qr error', err);
@@ -449,20 +515,21 @@ async function checkLoginStatus() {
     if (!json.success) return;
     if (json.status === 'authorized') {
       showToast('登录成功');
-      if (ui.neteaseLoginStatus) ui.neteaseLoginStatus.innerText = '已登录';
-      ui.neteaseLoginCard?.classList.remove('status-bad');
-      ui.neteaseLoginCard?.classList.add('status-ok');
-      if (ui.neteaseLoginDesc) ui.neteaseLoginDesc.innerText = '可以开始搜索或下载歌曲';
+      // Optimistic UI update
+      toggleLoginUI(true);
+
       ui.neteaseQrModal?.classList.remove('active');
-      refreshLoginStatus();
+
+      // Delay full refresh to allow backend cookie prop
+      setTimeout(() => refreshLoginStatus(true), 1000);
+
       if (state.neteasePollingTimer) { clearInterval(state.neteasePollingTimer); state.neteasePollingTimer = null; }
     } else if (json.status === 'expired') {
       showToast('二维码已过期，请重新获取');
       if (ui.neteaseQrHint) ui.neteaseQrHint.innerText = '二维码已过期，请重新获取';
       if (state.neteasePollingTimer) { clearInterval(state.neteasePollingTimer); state.neteasePollingTimer = null; }
     } else if (json.status === 'scanned') {
-      if (ui.neteaseLoginStatus) ui.neteaseLoginStatus.innerText = '已扫码，等待确认...';
-      if (ui.neteaseLoginDesc) ui.neteaseLoginDesc.innerText = '请在网易云确认登录';
+      if (ui.neteaseQrHint) ui.neteaseQrHint.innerText = '已扫码，等待手机确认...';
     }
   } catch (err) {
     console.error('check login error', err);
@@ -473,6 +540,7 @@ async function parseNeteaseLink() {
   const linkVal = ui.neteaseLinkInput ? ui.neteaseLinkInput.value.trim() : '';
   if (!linkVal) { showToast('请输入网易云链接或ID'); return; }
   if (ui.neteaseResultList) ui.neteaseResultList.innerHTML = '<div class="loading-text">解析中...</div>';
+  toggleBulkActions(false);
   try {
     const json = await api.netease.resolve(linkVal);
     if (!json.success) {
@@ -485,6 +553,7 @@ async function parseNeteaseLink() {
     renderNeteaseResults();
     if (!state.neteaseResults.length) {
       if (ui.neteaseResultList) ui.neteaseResultList.innerHTML = '<div class="loading-text">未找到歌曲</div>';
+      toggleBulkActions(false);
     } else {
       const msg = json.type === 'playlist'
         ? `已解析歌单${json.name ? `：${json.name}` : ''}（${state.neteaseResults.length} 首）`
@@ -512,17 +581,55 @@ function toggleNeteaseGate(enabled) {
   ui.neteaseContent?.classList.toggle('hidden', !enabled);
 }
 
+function toggleUserMenu(show) {
+  if (!ui.neteaseUserMenu) return;
+  const visible = typeof show === 'boolean' ? show : ui.neteaseUserMenu.classList.contains('hidden');
+  ui.neteaseUserMenu.classList.toggle('hidden', !visible);
+}
+
+function logoutNetease() {
+  return api.netease.logout()
+    .catch((err) => { console.error('logout api error', err); return { success: false }; })
+    .finally(() => {
+      state.neteaseUser = null;
+      localStorage.removeItem('2fmusic_netease_user');
+      toggleLoginUI(false);
+      showToast('已退出网易云');
+    });
+}
+
+function openSettingsModal() {
+  if (ui.neteaseApiSettingsInput) ui.neteaseApiSettingsInput.value = state.neteaseApiBase || '';
+  if (ui.neteaseDownloadDirInput) ui.neteaseDownloadDirInput.value = state.neteaseDownloadDir || '';
+  if (ui.neteaseSettingsModal) {
+    ui.neteaseSettingsModal.classList.remove('hidden');
+    ui.neteaseSettingsModal.classList.add('active');
+  }
+}
+
+function closeSettingsModal() {
+  if (ui.neteaseSettingsModal) {
+    ui.neteaseSettingsModal.classList.add('hidden');
+    ui.neteaseSettingsModal.classList.remove('active');
+  }
+}
+
 function bindEvents() {
   ui.neteaseSearchBtn?.addEventListener('click', searchNeteaseSongs);
   ui.neteaseKeywordsInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') searchNeteaseSongs(); });
-  ui.neteaseLoginBtn?.addEventListener('click', startNeteaseLogin);
+
+  // Login Button in Header
+  ui.neteaseLoginBtnTop?.addEventListener('click', startNeteaseLogin);
+
   ui.closeQrModalBtn?.addEventListener('click', () => {
     ui.neteaseQrModal?.classList.remove('active');
     if (state.neteasePollingTimer) { clearInterval(state.neteasePollingTimer); state.neteasePollingTimer = null; }
   });
-  ui.neteaseRefreshStatusBtn?.addEventListener('click', () => refreshLoginStatus(true));
-  ui.neteaseIdDownloadBtn?.addEventListener('click', parseNeteaseLink);
-  ui.neteaseLinkInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') parseNeteaseLink(); });
+
+  // Settings Modal
+  ui.neteaseSettingsBtn?.addEventListener('click', openSettingsModal);
+  ui.neteaseCloseSettingsBtn?.addEventListener('click', closeSettingsModal);
+
   ui.neteaseSaveDirBtn?.addEventListener('click', saveNeteaseConfig);
   if (ui.neteaseSelectAll) ui.neteaseSelectAll.addEventListener('change', (e) => {
     if (e.target.checked) state.neteaseSelected = new Set(state.neteaseResults.map(s => String(s.id)));
@@ -541,6 +648,28 @@ function bindEvents() {
   ui.neteaseOpenConfigBtn?.addEventListener('click', () => {
     ui.neteaseApiGateInput.focus();
     ui.neteaseApiGateInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  // User menu
+  ui.neteaseUserDisplay?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleUserMenu();
+  });
+  ui.neteaseMenuSettings?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleUserMenu(false);
+    openSettingsModal();
+  });
+  ui.neteaseMenuLogout?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    toggleUserMenu(false);
+    await logoutNetease();
+  });
+  document.addEventListener('click', (e) => {
+    if (!ui.neteaseUserMenu || ui.neteaseUserMenu.classList.contains('hidden')) return;
+    if (!ui.neteaseUserDisplay?.contains(e.target)) {
+      ui.neteaseUserMenu.classList.add('hidden');
+    }
   });
 }
 
