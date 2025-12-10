@@ -2572,10 +2572,6 @@ select:focus {
         padding-top: 2.5rem;
     }
 
-    .netease-download-floating {
-        top: 0;
-    }
-
     .netease-hero {
         grid-template-columns: 1fr;
     }
@@ -2604,6 +2600,24 @@ select:focus {
     .netease-actions {
         grid-column: 1 / -1;
         justify-content: flex-start;
+    }
+
+    .netease-download-floating {
+        position: fixed;
+        right: 1rem;
+        bottom: 1rem;
+        top: auto;
+        z-index: 120;
+    }
+
+    .netease-download-panel {
+        position: fixed;
+        left: 1rem;
+        right: 1rem;
+        top: 4rem;
+        bottom: auto;
+        width: auto;
+        max-width: none;
     }
 }
 
@@ -3023,11 +3037,6 @@ select:focus {
         z-index: 2000;
         /* 高于 Top Bar (1000) */
         gap: 0.5rem;
-    }
-
-    /* 手机端隐藏下载管理按钮 */
-    #netease-download-floating {
-        display: none !important;
     }
 
     /* 缩小一下移动端的按钮尺寸，避免挤占 */
