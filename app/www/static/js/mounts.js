@@ -10,36 +10,58 @@ export function startScanPolling(isUserAction = false, onRefreshSongs, onRefresh
   state.isPolling = true;
   let hasTrackedScan = false;
 
-  scanInterval = setInterval(async () => {
+  // 轮询函数，使用 setTimeout 实现动态间隔
+  const poll = async () => {
     try {
       const status = await api.system.status();
       const isModalOpen = ui.uploadModal && ui.uploadModal.classList.contains('active');
+
+      // 1. 处理扫描进度
       if (status.scanning) {
         hasTrackedScan = true;
         if (!isModalOpen) {
-          // 仅在用户手动操作或没有任何为歌曲时才显示扫描进度，避免打扰
           if (isUserAction || state.fullPlaylist.length === 0) {
             const percent = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
             showToast(`正在处理库... ${status.processed}/${status.total} (${percent}%)`, true);
           }
         }
-        if (status.processed % 20 === 0 && onRefreshSongs) onRefreshSongs(false);
       } else {
-        clearInterval(scanInterval);
-        state.isPolling = false;
-        hideProgressToast();
-        if ((isUserAction || hasTrackedScan) && !isModalOpen) {
-          showToast('处理完成！');
-          onRefreshSongs && onRefreshSongs();
-          if (state.currentTab === 'mount' && onRefreshMounts) onRefreshMounts();
+        if (hasTrackedScan) {
+          hasTrackedScan = false; // 重置标记
+          hideProgressToast();
+          if (!isModalOpen) {
+            showToast('处理完成！');
+            onRefreshSongs && onRefreshSongs();
+            if (state.currentTab === 'mount' && onRefreshMounts) onRefreshMounts();
+          }
         }
       }
+
+      // 2. 处理库版本变更 (自动同步)
+      if (status.library_version) {
+        if (state.libraryVersion === 0) {
+          // 首次初始化，仅同步版本号
+          state.libraryVersion = status.library_version;
+        } else if (status.library_version > state.libraryVersion) {
+          console.log(`检测到库版本变更: ${state.libraryVersion} -> ${status.library_version}`);
+          state.libraryVersion = status.library_version;
+          // 触发刷新
+          onRefreshSongs && onRefreshSongs(false); // false 表示不显示全屏 loading
+          // 可选：显示一个小提示
+          // showToast('发现新文件，列表已更新');
+        }
+      }
+
     } catch (e) {
       console.error('Poll error', e);
-      state.isPolling = false;
-      clearInterval(scanInterval);
+    } finally {
+      // 动态调整间隔：正在扫描时 1s，闲置时 2s
+      const delay = hasTrackedScan ? 1000 : 2000;
+      setTimeout(poll, delay);
     }
-  }, 1000);
+  };
+
+  poll();
 }
 
 export async function loadMountPoints() {

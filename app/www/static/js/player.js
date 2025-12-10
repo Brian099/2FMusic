@@ -44,7 +44,9 @@ export async function loadSongs(retry = true) {
           ...item,
           title: item.title || item.filename,
           artist: item.artist || '未知艺术家',
-          src: `/api/music/play/${encodeURIComponent(item.filename)}`,
+          // 严格使用 ID 进行播放
+          id: item.id,
+          src: `/api/music/play/${encodeURIComponent(item.id)}`,
           // 如果缓存中有非默认封面，则保留
           cover: (old && old.cover && !old.cover.includes('ICON_256')) ? old.cover : (item.album_art || '/static/images/ICON_256.PNG'),
           // 如果缓存中有歌词，则保留
@@ -88,9 +90,9 @@ export function startScan(isUserAction = false) {
   startScanPolling(isUserAction, loadSongs);
 }
 
-export async function performDelete(filename) {
-  const encodedName = encodeURIComponent(filename);
-  if (ui.audio.src.includes(encodedName)) {
+export async function performDelete(songId) {
+  const encodedName = encodeURIComponent(songId);
+  if (ui.audio.src.includes(encodedName)) { // 简单的匹配检查
     ui.audio.pause();
     ui.audio.removeAttribute('src');
     ui.audio.load();
@@ -103,7 +105,7 @@ export async function performDelete(filename) {
   const delay = ms => new Promise(res => setTimeout(res, ms));
   await delay(200);
   try {
-    const data = await api.library.deleteFile(filename);
+    const data = await api.library.deleteFile(songId);
     if (data.success) { showToast('删除成功'); await loadSongs(); ui.actionMenuOverlay?.classList.remove('active'); ui.confirmModalOverlay?.classList.remove('active'); }
     else { showToast('删除失败: ' + (data.error || '未知错误')); }
   } catch (err) { console.error('删除错误:', err); showToast('网络请求失败'); }
@@ -601,7 +603,7 @@ export function bindUiControls() {
       ui.actionMenuOverlay?.classList.remove('active');
       const currentSong = state.playQueue[state.currentTrackIndex];
       if (currentSong) {
-        showConfirmDialog('危险操作', `确定要永久删除这首歌吗？<br><span style="font-size:0.9rem; opacity:0.7">${currentSong.title}</span>`, () => performDelete(currentSong.filename));
+        showConfirmDialog('危险操作', `确定要永久删除这首歌吗？<br><span style="font-size:0.9rem; opacity:0.7">${currentSong.title}</span>`, () => performDelete(currentSong.id));
       }
     });
   }

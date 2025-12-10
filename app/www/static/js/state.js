@@ -23,7 +23,8 @@ export const state = {
   neteaseDownloadTasks: [],
   isPolling: false,
   progressToastEl: null,
-  currentConfirmAction: null
+  currentConfirmAction: null,
+  libraryVersion: 0,
 };
 
 export function persistState(audio) {

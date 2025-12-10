@@ -12,8 +12,8 @@ import logging
 import argparse
 import locale
 import concurrent.futures
-import json
 from urllib.parse import quote, unquote, urlparse, parse_qs
+import hashlib
 
 if getattr(sys, 'frozen', False):
     # 【打包模式】基准目录是二进制文件所在位置
@@ -29,6 +29,8 @@ try:
     import requests
     from mutagen import File
     from mutagen.easyid3 import EasyID3
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
 except ImportError as e:
     print(f"错误：无法导入依赖库。\n详情: {e}")
     sys.exit(1)
@@ -65,7 +67,7 @@ os.makedirs(os.path.join(MUSIC_LIBRARY_PATH, 'covers'), exist_ok=True)
 
 log_file = args.log_path or os.path.join(os.getcwd(), 'app.log')
 os.makedirs(os.path.dirname(log_file), exist_ok=True)
-DB_PATH = os.path.join(MUSIC_LIBRARY_PATH, 'library_cache.db')
+DB_PATH = os.path.join(MUSIC_LIBRARY_PATH, 'data.db')
 
 # --- 日志配置 ---
 logger = logging.getLogger(__name__)
@@ -78,6 +80,14 @@ console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+# 过滤 Werkzeug 访问日志，隐藏心跳检测的 200 响应
+class AccessLogFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        return not ('/api/system/status' in msg and '" 200 ' in msg)
+
+logging.getLogger('werkzeug').addFilter(AccessLogFilter())
+
 logger.info(f"Music Library Path: {MUSIC_LIBRARY_PATH}")
 
 # --- 全局状态变量 ---
@@ -87,6 +97,122 @@ SCAN_STATUS = {
     'processed': 0,
     'current_file': ''
 }
+
+# 库版本戳，用于前端检测变更
+LIBRARY_VERSION = time.time()
+
+# 辅助: 生成ID
+def generate_song_id(path):
+    return hashlib.md5(path.encode('utf-8')).hexdigest()
+
+# --- 文件监听器 ---
+class MusicFileEventHandler(FileSystemEventHandler):
+    """监听音乐库文件变动"""
+    def on_created(self, event):
+        if event.is_directory: return
+        self._process(event.src_path, 'created')
+
+    def on_deleted(self, event):
+        if event.is_directory: return
+        self._process(event.src_path, 'deleted')
+
+    def on_moved(self, event):
+        if event.is_directory: return
+        # 视为删除旧文件，添加新文件
+        self._process(event.src_path, 'deleted')
+        self._process(event.dest_path, 'created')
+
+    def _process(self, path, action):
+        global LIBRARY_VERSION
+        filename = os.path.basename(path)
+        ext = os.path.splitext(filename)[1].lower()
+        
+        is_audio = ext in AUDIO_EXTS
+        is_misc = ext in ('.lrc', '.jpg', '.jpeg', '.png')
+        
+        if not is_audio and not is_misc:
+            return
+
+        logger.info(f"检测到文件变更 [{action}]: {filename}")
+        
+        try:
+            if action == 'created':
+                time.sleep(0.5)
+                if is_audio:
+                    index_single_file(path)
+                elif is_misc:
+                    # 如果是附件，尝试重新索引同名音频文件以更新状态
+                    base = os.path.splitext(path)[0]
+                    for aud in AUDIO_EXTS:
+                        aud_path = base + aud
+                        if os.path.exists(aud_path):
+                            index_single_file(aud_path)
+                            
+            elif action == 'deleted':
+                if is_audio:
+                    with get_db() as conn:
+                        conn.execute("DELETE FROM songs WHERE path=?", (path,))
+                        conn.commit()
+                elif is_misc:
+                    # 附件删除，同样反向更新音频状态
+                    base = os.path.splitext(path)[0]
+                    for aud in AUDIO_EXTS:
+                        aud_path = base + aud
+                        if os.path.exists(aud_path):
+                            index_single_file(aud_path)
+            
+            LIBRARY_VERSION = time.time()
+            
+        except Exception as e:
+            logger.error(f"处理文件变更失败: {e}")
+
+# 全局 Observer 实例
+global_observer = None
+
+def init_watchdog():
+    global global_observer
+    if not Observer: return
+    
+    if global_observer:
+        global_observer.stop()
+        global_observer.join()
+        
+    global_observer = Observer()
+    refresh_watchdog_paths()
+    global_observer.start()
+    logger.info("文件监听服务已启动")
+    try:
+        while True:
+            time.sleep(1)
+    except:
+        global_observer.stop()
+    global_observer.join()
+
+def refresh_watchdog_paths():
+    """根据数据库刷新监听目录"""
+    global global_observer
+    if not global_observer: return
+    
+    # 1. 移除现有所有 schedule
+    global_observer.unschedule_all()
+    
+    # 2. 获取目标路径
+    targets = {MUSIC_LIBRARY_PATH}
+    try:
+        with get_db() as conn:
+            rows = conn.execute("SELECT path FROM mount_points").fetchall()
+            for r in rows: targets.add(r['path'])
+    except: pass
+    
+    # 3. 重新添加 schedule
+    event_handler = MusicFileEventHandler()
+    for path in targets:
+        if os.path.exists(path):
+            try:
+                global_observer.schedule(event_handler, path, recursive=True)
+                logger.info(f"监听目录: {path}")
+            except Exception as e:
+                logger.warning(f"无法监听目录 {path}: {e}")
 
 DOWNLOAD_TASKS = {} # task_id -> {status, progress, message, filename}
 
@@ -102,9 +228,21 @@ def get_db():
 def init_db():
     try:
         with get_db() as conn:
+            # 检查旧模式并迁移（直接重建更简单）
+            # 如果 songs 表没有 'path' 列，视为旧表，删除重建
+            try:
+                cursor = conn.execute("SELECT path FROM songs LIMIT 1")
+            except Exception:
+                # 抛出异常说明列不存在，或者是旧表
+                conn.execute("DROP TABLE IF EXISTS songs")
+                # mount_files 也不再需要
+                conn.execute("DROP TABLE IF EXISTS mount_files")
+
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS songs (
-                    filename TEXT PRIMARY KEY,
+                    id TEXT PRIMARY KEY,
+                    path TEXT UNIQUE,
+                    filename TEXT,
                     title TEXT,
                     artist TEXT,
                     album TEXT,
@@ -119,14 +257,21 @@ def init_db():
                     created_at REAL
                 )
             ''')
+            
             conn.execute('''
-                CREATE TABLE IF NOT EXISTS mount_files (
-                    mount_path TEXT,
-                    file_type TEXT, 
-                    filename TEXT,
-                    PRIMARY KEY (mount_path, filename)
+                CREATE TABLE IF NOT EXISTS system_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
                 )
             ''')
+            
+
+            
+            # 清理错误索引的非音频文件
+            try:
+                conn.execute("DELETE FROM songs WHERE filename NOT LIKE '%.mp3' AND filename NOT LIKE '%.wav' AND filename NOT LIKE '%.ogg' AND filename NOT LIKE '%.flac' AND filename NOT LIKE '%.aac' AND filename NOT LIKE '%.m4a' AND filename NOT LIKE '%.wma'")
+            except: pass
+            
             conn.commit()
         logger.info("数据库初始化完成。")
     except Exception as e:
@@ -169,21 +314,29 @@ def get_metadata(file_path):
     logger.debug(f"文件 {file_path} 元数据: {metadata}")
     return metadata
 
+AUDIO_EXTS = ('.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma')
+
 def index_single_file(file_path):
-    """单独索引一个文件，不进行全盘扫描。"""
+    """单独索引一个文件。"""
     try:
         if not os.path.exists(file_path): return
+        # 严格限制只能索引音频文件
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext not in AUDIO_EXTS: return
         
         stat = os.stat(file_path)
         meta = get_metadata(file_path)
-        base = os.path.splitext(os.path.basename(file_path))[0]
-        has_cover = 1 if os.path.exists(os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{base}.jpg")) else 0
+        sid = generate_song_id(file_path)
+        # 封面图逻辑需调整：优先根据歌曲ID存，或者内嵌，这里暂时保持兼容逻辑：看有没有同名jpg
+        # 但在多目录下，同名jpg比较难找。暂定：如果同目录下有同名jpg，则 marked as has_cover
+        base_path = os.path.splitext(file_path)[0]
+        has_cover = 1 if os.path.exists(base_path + ".jpg") or os.path.exists(os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{os.path.basename(base_path)}.jpg")) else 0
         
         with get_db() as conn:
             conn.execute('''
-                INSERT OR REPLACE INTO songs (filename, title, artist, album, mtime, size, has_cover)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (os.path.basename(file_path), meta['title'], meta['artist'], meta['album'], stat.st_mtime, stat.st_size, has_cover))
+                INSERT OR REPLACE INTO songs (id, path, filename, title, artist, album, mtime, size, has_cover)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (sid, file_path, os.path.basename(file_path), meta['title'], meta['artist'], meta['album'], stat.st_mtime, stat.st_size, has_cover))
             conn.commit()
         logger.info(f"单文件索引完成: {file_path}")
     except Exception as e:
@@ -211,58 +364,72 @@ def scan_library_incremental():
         with open(lock_file, 'w') as f: f.write(str(time.time()))
         logger.info("开始增量扫描...")
         
-        disk_files = {}
+        # 1. 获取所有扫描根目录
+        scan_roots = [MUSIC_LIBRARY_PATH]
+        try:
+            with get_db() as conn:
+                rows = conn.execute("SELECT path FROM mount_points").fetchall()
+                scan_roots.extend([r['path'] for r in rows])
+        except Exception: pass
+        
+        disk_files = {} # path -> info
         supported_exts = ('.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma')
         
-        # 1. 快速遍历文件
-        files_to_process_list = []
-        
-        for root, dirs, files in os.walk(MUSIC_LIBRARY_PATH):
-            dirs[:] = [d for d in dirs if d not in ('lyrics', 'covers')]
-            for f in files:
-                if f.lower().endswith(supported_exts):
-                    if root != MUSIC_LIBRARY_PATH: continue 
-                    path = os.path.join(root, f)
-                    try:
-                        stat = os.stat(path)
-                        info = {'mtime': stat.st_mtime, 'size': stat.st_size, 'path': path, 'filename': f}
-                        disk_files[f] = info
-                    except: pass
+        # 2. 遍历所有目录
+        for root_dir in scan_roots:
+            if not os.path.exists(root_dir): continue
+            for root, dirs, files in os.walk(root_dir):
+                # 排除自动生成的目录
+                dirs[:] = [d for d in dirs if d not in ('lyrics', 'covers')]
+                for f in files:
+                    if f.lower().endswith(supported_exts):
+                        path = os.path.join(root, f)
+                        try:
+                            stat = os.stat(path)
+                            info = {'mtime': stat.st_mtime, 'size': stat.st_size, 'path': path, 'filename': f}
+                            disk_files[path] = info
+                        except: pass
 
         with get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT filename, mtime, size FROM songs")
-            db_rows = {row['filename']: row for row in cursor.fetchall()}
+            cursor.execute("SELECT id, path, mtime, size FROM songs")
+            db_rows = {row['path']: row for row in cursor.fetchall()}
             
             # 删除不存在的文件
-            to_delete = set(db_rows.keys()) - set(disk_files.keys())
-            if to_delete:
-                cursor.executemany("DELETE FROM songs WHERE filename=?", [(f,) for f in to_delete])
+            # 注意：如果某个挂载点被临时拔出，这里会删除其歌曲。
+            # 为了稳健，如果根目录都不存在，应该跳过删除该目录下的歌曲？
+            # 暂时简化处理：只删除那些“在其父目录仍然存在但文件消失”的情况？
+            # 简单起见：全量比对，消失即删除。
+            to_delete_paths = set(db_rows.keys()) - set(disk_files.keys())
+            if to_delete_paths:
+                cursor.executemany("DELETE FROM songs WHERE path=?", [(p,) for p in to_delete_paths])
                 conn.commit()
 
             # 筛选需要更新的文件
-            for fname, info in disk_files.items():
-                db_rec = db_rows.get(fname)
+            files_to_process_list = []
+            for path, info in disk_files.items():
+                db_rec = db_rows.get(path)
                 if not db_rec or db_rec['mtime'] != info['mtime'] or db_rec['size'] != info['size']:
                     files_to_process_list.append(info)
 
-            # 更新状态：准备处理
+            # 更新状态
             total_files = len(files_to_process_list)
             SCAN_STATUS.update({'total': total_files, 'processed': 0})
             
             to_update_db = []
             
-            # 2. 多线程提取元数据
+            # 3. 多线程处理
             if total_files > 0:
                 logger.info(f"使用线程池处理 {total_files} 个文件...")
                 
                 def process_file_metadata(info):
                     meta = get_metadata(info['path'])
-                    base = os.path.splitext(info['filename'])[0]
-                    has_cover = 1 if os.path.exists(os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{base}.jpg")) else 0
-                    return (info['filename'], meta['title'], meta['artist'], meta['album'], info['mtime'], info['size'], has_cover)
+                    sid = generate_song_id(info['path'])
+                    # 封面逻辑
+                    base_path = os.path.splitext(info['path'])[0]
+                    has_cover = 1 if os.path.exists(base_path + ".jpg") or os.path.exists(os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{os.path.basename(base_path)}.jpg")) else 0
+                    return (sid, info['path'], info['filename'], meta['title'], meta['artist'], meta['album'], info['mtime'], info['size'], has_cover)
 
-                # 使用线程池并发处理
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     futures = {executor.submit(process_file_metadata, item): item for item in files_to_process_list}
                     for future in concurrent.futures.as_completed(futures):
@@ -271,20 +438,19 @@ def scan_library_incremental():
                             to_update_db.append(res)
                         except Exception: pass
                         
-                        # 更新进度
                         SCAN_STATUS['processed'] += 1
                         if SCAN_STATUS['processed'] % 10 == 0:
                             SCAN_STATUS['current_file'] = f"处理中... {int((SCAN_STATUS['processed']/total_files)*100)}%"
 
-                # 批量写入
                 if to_update_db:
                     cursor.executemany('''
-                        INSERT OR REPLACE INTO songs (filename, title, artist, album, mtime, size, has_cover)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT OR REPLACE INTO songs (id, path, filename, title, artist, album, mtime, size, has_cover)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', to_update_db)
                     conn.commit()
 
         logger.info("扫描完成。")
+        global LIBRARY_VERSION; LIBRARY_VERSION = time.time()
         
     except Exception as e:
         logger.error(f"扫描失败: {e}")
@@ -296,6 +462,7 @@ def scan_library_incremental():
             except: pass
 
 threading.Thread(target=lambda: (init_db(), scan_library_incremental()), daemon=True).start()
+threading.Thread(target=init_watchdog, daemon=True).start()
 
 # --- 路由定义 ---
 @app.route('/')
@@ -306,7 +473,9 @@ def index(): return render_template('index.html')
 @app.route('/api/system/status')
 def get_system_status():
     """返回当前扫描状态和进度"""
-    return jsonify(SCAN_STATUS)
+    status = dict(SCAN_STATUS)
+    status['library_version'] = LIBRARY_VERSION
+    return jsonify(status)
 
 @app.route('/api/music', methods=['GET'])
 def get_music_list():
@@ -316,12 +485,23 @@ def get_music_list():
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM songs ORDER BY title")
             songs = []
+            seen = set()
+            
             for row in cursor.fetchall():
+                # 去重逻辑：如果 标题+歌手+大小 完全一致，视为重复文件，仅保留第一个
+                # 这样可以解决不同目录下存放相同文件导致的列表重复问题
+                unique_key = (row['title'], row['artist'], row['size'])
+                if unique_key in seen:
+                    continue
+                seen.add(unique_key)
+                
                 album_art = None
                 if row['has_cover']:
                     base_name = os.path.splitext(row['filename'])[0]
+                    # 封面图链接带上 filename 参数仅作缓存区分，实际通过 scan 查找
                     album_art = f"/api/music/covers/{quote(base_name)}.jpg?filename={quote(row['filename'])}"
                 songs.append({
+                    'id': row['id'], # 新增 ID
                     'filename': row['filename'], 'title': row['title'],
                     'artist': row['artist'], 'album': row['album'], 'album_art': album_art
                 })
@@ -331,14 +511,19 @@ def get_music_list():
         logger.exception(f"获取音乐列表失败: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/api/music/play/<filename>')
-def play_music(filename):
-    logger.info(f"API请求: 播放音乐 {filename}")
-    path = os.path.join(MUSIC_LIBRARY_PATH, unquote(filename))
-    if os.path.exists(path):
-        logger.info(f"文件存在，开始发送: {path}")
-        return send_file(path, conditional=True)
-    logger.warning(f"文件未找到: {path}")
+@app.route('/api/music/play/<song_id>')
+def play_music(song_id):
+    logger.info(f"API请求: 播放音乐 ID={song_id}")
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT path FROM songs WHERE id=?", (song_id,)).fetchone()
+            if row and os.path.exists(row['path']):
+                return send_file(row['path'], conditional=True)
+            
+    except Exception as e:
+        logger.error(f"播放失败: {e}")
+
+    logger.warning(f"文件未找到或ID无效: {song_id}")
     return jsonify({'error': 'Not Found'}), 404
 
 # --- 挂载相关 ---
@@ -356,93 +541,21 @@ def add_mount_point():
     try:
         path = request.json.get('path')
         if not path or not os.path.exists(path):
-            logger.warning(f"挂载路径不存在: {path}")
             return jsonify({'success': False, 'error': '路径不存在'})
+            
+        path = os.path.abspath(path)
+        
         with get_db() as conn:
             if conn.execute("SELECT 1 FROM mount_points WHERE path=?", (path,)).fetchone():
-                logger.warning(f"挂载点已存在: {path}")
                 return jsonify({'success': False, 'error': '已挂载'})
             conn.execute("INSERT INTO mount_points (path, created_at) VALUES (?, ?)", (path, time.time()))
             conn.commit()
-        logger.info(f"挂载点已添加: {path}")
 
-        # 立即设置状态，防止前端轮询时线程还未启动
-        SCAN_STATUS['scanning'] = True
-        SCAN_STATUS['total'] = 0
-        SCAN_STATUS['processed'] = 0
-        SCAN_STATUS['current_file'] = "正在准备挂载..."
-
-        def run_mount():
-            try:
-                logger.info(f"后台任务启动: 挂载 {path}")
-                audio_exts = ('.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma')
-                misc_exts = ('.lrc', '.jpg', '.png', '.jpeg')
-                
-                # 第一步：计算总数
-                SCAN_STATUS['current_file'] = "正在分析文件列表..."
-                total_files = 0
-                for root, _, files in os.walk(path):
-                    for f in files:
-                        lower_f = f.lower()
-                        if lower_f.endswith(audio_exts) or lower_f.endswith(misc_exts):
-                            total_files += 1
-                SCAN_STATUS['total'] = total_files
-                
-                # 预先设置 processed 为 0，避免闪烁
-                SCAN_STATUS['processed'] = 0
-                
-                # 第二步：执行处理
-                added = []
-                processed_count = 0
-                
-                for root, _, files in os.walk(path):
-                    for f in files:
-                        lower_f = f.lower()
-                        is_audio = lower_f.endswith(audio_exts)
-                        is_misc = lower_f.endswith(misc_exts)
-                        
-                        if is_audio or is_misc:
-                            SCAN_STATUS['current_file'] = f"导入: {f}"
-                            processed_count += 1
-                            SCAN_STATUS['processed'] = processed_count
-                            
-                            base = os.path.splitext(f)[0]
-                            if is_audio:
-                                src = os.path.join(root, f)
-                                dst = os.path.join(MUSIC_LIBRARY_PATH, f)
-                                if not os.path.exists(dst):
-                                    try:
-                                        os.symlink(src, dst)
-                                    except Exception:
-                                        try: shutil.copy2(src, dst)
-                                        except Exception: pass
-                                added.append((path, 'audio', f))
-                            
-                            elif is_misc:
-                                sub_dir = 'lyrics' if lower_f.endswith('.lrc') else 'covers'
-                                s_path = os.path.join(root, f)
-                                d_path = os.path.join(MUSIC_LIBRARY_PATH, sub_dir, f)
-                                if not os.path.exists(d_path):
-                                    try: shutil.copy2(s_path, d_path)
-                                    except Exception: pass
-                                added.append((path, 'misc', f))
-
-                if added:
-                    with get_db() as conn:
-                        conn.executemany("INSERT OR IGNORE INTO mount_files VALUES (?, ?, ?)", added)
-                        conn.commit()
-                    logger.info(f"挂载文件入库: {len(added)} 条")
-                
-                # 触发扫描索引（scan_library_incremental 会重置 SCAN_STATUS 并显示索引进度）
-                scan_library_incremental()
-                logger.info(f"挂载点扫描完成: {path}")
-                
-            except Exception as e:
-                logger.error(f"挂载任务异常: {e}")
-                SCAN_STATUS['scanning'] = False
-
-        threading.Thread(target=run_mount, daemon=True).start()
-        return jsonify({'success': True, 'message': '后台处理中...'})
+        # 刷新监听并触发扫描
+        refresh_watchdog_paths()
+        threading.Thread(target=scan_library_incremental, daemon=True).start()
+        
+        return jsonify({'success': True, 'message': '挂载点已添加，正在后台处理...'})
     except Exception as e:
         logger.exception(f"添加挂载点失败: {e}")
         return jsonify({'success': False, 'error': str(e)})
@@ -452,21 +565,15 @@ def remove_mount_point():
     try:
         path = request.json.get('path')
         with get_db() as conn:
-            files = conn.execute("SELECT file_type, filename FROM mount_files WHERE mount_path=?", (path,)).fetchall()
-            for row in files:
-                fpath = None
-                if row['file_type'] == 'audio': fpath = os.path.join(MUSIC_LIBRARY_PATH, row['filename'])
-                elif row['filename'].endswith('.lrc'): fpath = os.path.join(MUSIC_LIBRARY_PATH, 'lyrics', row['filename'])
-                else: fpath = os.path.join(MUSIC_LIBRARY_PATH, 'covers', row['filename'])
-                
-                if fpath and os.path.exists(fpath):
-                    try: os.remove(fpath)
-                    except: pass
-            
-            conn.execute("DELETE FROM songs WHERE filename IN (SELECT filename FROM mount_files WHERE mount_path=? AND file_type='audio')", (path,))
+            # 清理该路径下的歌曲
+            conn.execute("DELETE FROM songs WHERE path LIKE ? || '%'", (path,))
             conn.execute("DELETE FROM mount_points WHERE path=?", (path,))
-            conn.execute("DELETE FROM mount_files WHERE mount_path=?", (path,))
             conn.commit()
+            
+        refresh_watchdog_paths()
+        
+        # 触发一次库版本更新
+        global LIBRARY_VERSION; LIBRARY_VERSION = time.time()
             
         return jsonify({'success': True, 'message': '已移除'})
     except Exception as e: return jsonify({'success': False, 'error': str(e)})
@@ -478,10 +585,8 @@ COMMON_HEADERS = {
 }
 NETEASE_API_BASE_DEFAULT = os.environ.get('NETEASE_API_BASE', 'http://localhost:23236')
 NETEASE_API_BASE = NETEASE_API_BASE_DEFAULT
-NETEASE_COOKIE_PATH = os.path.join(MUSIC_LIBRARY_PATH, '.netease_cookie')
-NETEASE_COOKIE = None
-NETEASE_CONFIG_PATH = os.path.join(MUSIC_LIBRARY_PATH, '.netease_config.json')
 NETEASE_DOWNLOAD_DIR = os.environ.get('NETEASE_DOWNLOAD_PATH', MUSIC_LIBRARY_PATH)
+NETEASE_COOKIE = None
 
 def parse_cookie_string(cookie_str: str):
     """将 Set-Cookie 字符串解析为 requests 兼容的字典。"""
@@ -506,55 +611,51 @@ def normalize_cookie_string(raw: str) -> str:
 
 def load_netease_cookie():
     global NETEASE_COOKIE
-    if os.path.exists(NETEASE_COOKIE_PATH):
-        try:
-            with open(NETEASE_COOKIE_PATH, 'r', encoding='utf-8') as f:
-                NETEASE_COOKIE = normalize_cookie_string(f.read().strip()) or None
-        except Exception as e:
-            logger.warning(f"读取网易云 cookie 失败: {e}")
+    try:
+        with get_db() as conn:
+            row = conn.execute("SELECT value FROM system_settings WHERE key='netease_cookie'").fetchone()
+            if row and row['value']:
+                NETEASE_COOKIE = normalize_cookie_string(row['value'])
+    except Exception as e:
+        logger.warning(f"读取网易云 cookie 失败: {e}")
 
 def save_netease_cookie(cookie_str: str):
     global NETEASE_COOKIE
     NETEASE_COOKIE = normalize_cookie_string(cookie_str or '')
     try:
-        with open(NETEASE_COOKIE_PATH, 'w', encoding='utf-8') as f:
-            f.write(NETEASE_COOKIE)
+        with get_db() as conn:
+            conn.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)", ('netease_cookie', NETEASE_COOKIE))
+            conn.commit()
     except Exception as e:
         logger.warning(f"保存网易云 cookie 失败: {e}")
 
 def load_netease_config():
     global NETEASE_DOWNLOAD_DIR, NETEASE_API_BASE
-    if os.path.exists(NETEASE_CONFIG_PATH):
-        try:
-            with open(NETEASE_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                download_dir = data.get('download_dir')
-                if download_dir:
-                    NETEASE_DOWNLOAD_DIR = download_dir
-                api_base = data.get('api_base')
-                if api_base:
-                    NETEASE_API_BASE = api_base
-                else:
-                    # 回填默认值，方便用户在配置文件中看到
-                    save_netease_config(NETEASE_DOWNLOAD_DIR, NETEASE_API_BASE)
-        except Exception as e:
-            logger.warning(f"读取网易云配置失败: {e}")
-    else:
-        # 首次保存默认配置，方便用户查看
-        save_netease_config(NETEASE_DOWNLOAD_DIR, NETEASE_API_BASE)
+    try:
+        with get_db() as conn:
+            # Download Dir
+            row = conn.execute("SELECT value FROM system_settings WHERE key='netease_download_dir'").fetchone()
+            if row and row['value']: NETEASE_DOWNLOAD_DIR = row['value']
+            
+            # API Base
+            row = conn.execute("SELECT value FROM system_settings WHERE key='netease_api_base'").fetchone()
+            if row and row['value']: NETEASE_API_BASE = row['value']
+            
+    except Exception as e:
+        logger.warning(f"读取网易云配置失败: {e}")
 
 def save_netease_config(download_dir: str = None, api_base: str = None):
     global NETEASE_DOWNLOAD_DIR, NETEASE_API_BASE
-    if download_dir:
-        NETEASE_DOWNLOAD_DIR = download_dir
-    if api_base:
-        NETEASE_API_BASE = api_base.rstrip('/') or NETEASE_API_BASE_DEFAULT
+    if download_dir: NETEASE_DOWNLOAD_DIR = download_dir
+    if api_base: NETEASE_API_BASE = api_base.rstrip('/') or NETEASE_API_BASE_DEFAULT
+    
     try:
-        with open(NETEASE_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            json.dump({
-                'download_dir': NETEASE_DOWNLOAD_DIR,
-                'api_base': NETEASE_API_BASE
-            }, f, ensure_ascii=False, indent=2)
+        with get_db() as conn:
+            if download_dir:
+                conn.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)", ('netease_download_dir', NETEASE_DOWNLOAD_DIR))
+            if api_base:
+                conn.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)", ('netease_api_base', NETEASE_API_BASE))
+            conn.commit()
     except Exception as e:
         logger.warning(f"保存网易云配置失败: {e}")
 
@@ -786,36 +887,52 @@ def get_album_art_api():
         
     return jsonify({'success': False})
 
-@app.route('/api/music/delete/<filename>', methods=['DELETE'])
-def delete_file(filename):
-    filename = unquote(filename)
+@app.route('/api/music/delete/<song_id>', methods=['DELETE'])
+def delete_file(song_id):
     try:
-        path = os.path.join(MUSIC_LIBRARY_PATH, filename)
-        if os.path.exists(path):
-            # 重试机制应对 Windows 文件锁
-            for i in range(10):
-                try:
-                    os.remove(path)
-                    break
-                except PermissionError:
-                    if i < 9: time.sleep(0.2)
-                    else: return jsonify({'success': False, 'error': '文件正被占用，无法删除'})
+        # 1. 查询路径
+        target_path = None
+        with get_db() as conn:
+            row = conn.execute("SELECT path FROM songs WHERE id=?", (song_id,)).fetchone()
+            if row: target_path = row['path']
+        
+        if not target_path or not os.path.exists(target_path):
+            return jsonify({'success': False, 'error': '文件未找到'})
+
+        # 2. 执行删除
+        # 重试机制应对 Windows 文件锁
+        for i in range(10):
+            try:
+                os.remove(target_path)
+                break
+            except PermissionError:
+                if i < 9: time.sleep(0.2)
+                else: return jsonify({'success': False, 'error': '文件正被占用，无法删除'})
+        
+        # 3. 清理关联资源 (封面/歌词)
+        # 注意：多目录下，关联资源可能在同级目录
+        base = os.path.splitext(target_path)[0]
+        for ext in ['.lrc', '.jpg']:
+            try:
+                if os.path.exists(base + ext): os.remove(base + ext)
+            except: pass
             
-            # 清理关联元数据
-            base = os.path.splitext(filename)[0]
-            for sub in ['lyrics', 'covers']:
-                ext = '.lrc' if sub == 'lyrics' else '.jpg'
-                sub_path = os.path.join(MUSIC_LIBRARY_PATH, sub, base + ext)
-                try: 
-                    if os.path.exists(sub_path): os.remove(sub_path)
-                except: pass
+        # 尝试清理主库下的 covers/lyrics (如果是主库文件)
+        filename = os.path.basename(target_path)
+        base_name = os.path.splitext(filename)[0]
+        for sub in ['lyrics', 'covers']:
+            ext = '.lrc' if sub == 'lyrics' else '.jpg'
+            sub_path = os.path.join(MUSIC_LIBRARY_PATH, sub, base_name + ext)
+            try: 
+                if os.path.exists(sub_path): os.remove(sub_path)
+            except: pass
+        
+        # 4. 数据库清理 (Watchdog 也会做，但双重保障)
+        with get_db() as conn:
+            conn.execute("DELETE FROM songs WHERE path=?", (target_path,))
+            conn.commit()
             
-            with get_db() as conn:
-                conn.execute("DELETE FROM songs WHERE filename=?", (filename,))
-                conn.execute("DELETE FROM mount_files WHERE filename=?", (filename,))
-                conn.commit()
-            return jsonify({'success': True})
-        return jsonify({'success': False, 'error': '文件未找到'})
+        return jsonify({'success': True})
     except Exception as e: 
         return jsonify({'success': False, 'error': str(e)})
 
@@ -986,8 +1103,7 @@ def netease_debug():
     info = {
         'cookie_loaded': bool(NETEASE_COOKIE),
         'cookie_len': len(NETEASE_COOKIE) if NETEASE_COOKIE else 0,
-        'cookie_path': NETEASE_COOKIE_PATH,
-        'cookie_exists': os.path.exists(NETEASE_COOKIE_PATH),
+        'cookie_source': 'database',
         'download_dir': NETEASE_DOWNLOAD_DIR,
         'api_base': NETEASE_API_BASE,
     }
