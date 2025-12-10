@@ -470,15 +470,19 @@ if (ui.fpProgressBar) {
 
 async function checkAndFetchMetadata(track, fetchId) {
   const query = `?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}&filename=${encodeURIComponent(track.filename)}`;
-  if (!track.lyrics) {
+
+  const fetchLyrics = async () => {
+    if (track.lyrics) return;
     try {
       const d = await api.library.lyrics(query);
       if (fetchId !== state.currentFetchId) return;
       if (d.success && d.lyrics) { track.lyrics = d.lyrics; savePlaylist(); parseAndRenderLyrics(d.lyrics); }
       else { renderNoLyrics('暂无歌词'); }
     } catch (e) { if (fetchId === state.currentFetchId) renderNoLyrics('歌词加载失败'); }
-  }
-  if (track.cover.includes('ICON_256.PNG')) {
+  };
+
+  const fetchCover = async () => {
+    if (!track.cover.includes('ICON_256.PNG')) return;
     try {
       const d = await api.library.albumArt(query);
       if (fetchId !== state.currentFetchId) return;
@@ -489,7 +493,9 @@ async function checkAndFetchMetadata(track, fetchId) {
         renderPlaylist();
       }
     } catch (e) { }
-  }
+  };
+
+  await Promise.all([fetchLyrics(), fetchCover()]);
 }
 
 function parseAndRenderLyrics(lrc) {

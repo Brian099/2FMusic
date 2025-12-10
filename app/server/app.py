@@ -218,6 +218,8 @@ DOWNLOAD_TASKS = {} # task_id -> {status, progress, message, filename}
 
 # 修复路径问题
 app = Flask(__name__, static_folder=STATIC_DIR, template_folder=TEMPLATE_DIR)
+# 配置静态文件缓存过期时间为 1 年 (31536000 秒)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
 
 # --- 数据库管理 ---
 def get_db():
