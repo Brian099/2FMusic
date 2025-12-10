@@ -178,7 +178,7 @@ export function extractColorFromImage(imgEl) {
       const colorThief = new ColorThief();
       const rgb = colorThief.getColor(imgEl);
       if (rgb && rgb.length === 3) {
-        return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.8)`;
+        return { r: rgb[0], g: rgb[1], b: rgb[2], toString: () => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.8)` };
       }
     }
 
@@ -190,7 +190,7 @@ export function extractColorFromImage(imgEl) {
     // 取图片中心点
     ctx.drawImage(imgEl, imgEl.naturalWidth / 2, imgEl.naturalHeight / 2, 1, 1, 0, 0, 1, 1);
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-    return `rgba(${r}, ${g}, ${b}, 0.8)`;
+    return { r, g, b, toString: () => `rgba(${r}, ${g}, ${b}, 0.8)` };
   } catch (e) {
     console.warn('Color extraction failed', e);
     return null;

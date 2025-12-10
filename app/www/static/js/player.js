@@ -376,9 +376,24 @@ function togglePlayMode() { state.playMode = (state.playMode + 1) % 3; updatePla
 function updatePlayModeUI() {
   if (!ui.fpBtnMode) return;
   ui.fpBtnMode.classList.remove('active-mode', 'mode-loop-one');
-  if (state.playMode === 0) { ui.fpBtnMode.innerHTML = '<i class="fas fa-redo"></i>'; ui.fpBtnMode.title = '列表循环'; }
-  else if (state.playMode === 1) { ui.fpBtnMode.classList.add('active-mode', 'mode-loop-one'); ui.fpBtnMode.innerHTML = '<i class="fas fa-random"></i>'; ui.fpBtnMode.title = '随机播放'; }
-  else if (state.playMode === 2) { ui.fpBtnMode.classList.add('active-mode', 'mode-loop-one'); ui.fpBtnMode.innerHTML = '<i class="fas fa-redo"></i>'; ui.fpBtnMode.title = '单曲循环'; ui.fpBtnMode.classList.add('active-mode'); }
+
+  // Mode 0: List Loop (Default)
+  if (state.playMode === 0) {
+    ui.fpBtnMode.innerHTML = '<i class="fas fa-redo"></i>';
+    ui.fpBtnMode.title = '列表循环';
+  }
+  // Mode 1: Shuffle
+  else if (state.playMode === 1) {
+    ui.fpBtnMode.classList.add('active-mode');
+    ui.fpBtnMode.innerHTML = '<i class="fas fa-random"></i>';
+    ui.fpBtnMode.title = '随机播放';
+  }
+  // Mode 2: Single Loop
+  else if (state.playMode === 2) {
+    ui.fpBtnMode.classList.add('active-mode', 'mode-loop-one');
+    ui.fpBtnMode.innerHTML = '<i class="fas fa-redo"></i>';
+    ui.fpBtnMode.title = '单曲循环';
+  }
 }
 
 function nextTrack() {
@@ -776,10 +791,13 @@ export function bindUiControls() {
         if (ui.fullPlayerOverlay) ui.fullPlayerOverlay.style.background = 'rgba(0, 0, 0, 0.85)';
       } else {
         const color = extractColorFromImage(fpCover);
-        if (color && ui.fullPlayerOverlay) {
-          // 稍微降低透明度，让颜色更明显
-          // color 格式是 rgba(r,g,b,0.8)，我们如果想更亮，可以在 utils 里调，或者这里叠加
-          ui.fullPlayerOverlay.style.background = `linear-gradient(to bottom, ${color} 0%, #000 120%)`;
+        if (color) {
+          // 1. 设置全屏背景渐变
+          ui.fullPlayerOverlay.style.background = `linear-gradient(to bottom, ${color.toString()} 0%, #000 120%)`;
+
+          // 2. 设置动态菜单背景色 (使用提取的 RGB + 0.6 透明度)
+          // 这样 Action Menu 就有了跟随封面的半透明背景
+          document.documentElement.style.setProperty('--dynamic-glass-color', `rgba(${color.r}, ${color.g}, ${color.b}, 0.6)`);
         }
       }
     };
