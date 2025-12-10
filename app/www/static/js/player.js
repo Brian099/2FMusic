@@ -1,7 +1,7 @@
 import { state, persistState, saveFavorites, savePlaylist } from './state.js';
 import { ui } from './ui.js';
 import { api } from './api.js';
-import { showToast, showConfirmDialog, hideProgressToast, updateDetailFavButton, formatTime, renderNoLyrics, updateSliderFill, flyToElement, throttle } from './utils.js';
+import { showToast, showConfirmDialog, hideProgressToast, updateDetailFavButton, formatTime, renderNoLyrics, updateSliderFill, flyToElement, throttle, extractColorFromImage } from './utils.js';
 import { startScanPolling, loadMountPoints } from './mounts.js';
 
 // 收藏
@@ -639,6 +639,33 @@ export function bindUiControls() {
         if (outsideSidebar && outsideBtn && outsideTitle) ui.sidebar.classList.remove('open');
       }
     });
+  }
+
+  // 封面自适应背景色
+  const fpCover = document.getElementById('fp-cover');
+  if (fpCover) {
+    // 允许跨域图片提取颜色
+    fpCover.crossOrigin = "Anonymous";
+
+    const updateBg = () => {
+      // 简单判断是否是默认图
+      if (fpCover.src.indexOf('ICON_256.PNG') !== -1) {
+        if (ui.fullPlayerOverlay) ui.fullPlayerOverlay.style.background = 'rgba(0, 0, 0, 0.85)';
+      } else {
+        const color = extractColorFromImage(fpCover);
+        if (color && ui.fullPlayerOverlay) {
+          // 稍微降低透明度，让颜色更明显
+          // color 格式是 rgba(r,g,b,0.8)，我们如果想更亮，可以在 utils 里调，或者这里叠加
+          ui.fullPlayerOverlay.style.background = `linear-gradient(to bottom, ${color} 0%, #000 120%)`;
+        }
+      }
+    };
+
+    fpCover.addEventListener('load', updateBg);
+    // 关键修正：如果图片已经加载完成（比如来自缓存），手动触发一次
+    if (fpCover.complete && fpCover.naturalWidth > 0) {
+      updateBg();
+    }
   }
 }
 

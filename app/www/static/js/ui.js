@@ -3,6 +3,7 @@ export const ui = {
   audio: document.getElementById('audio-player'),
   songContainer: document.getElementById('song-list-container'),
   overlay: document.getElementById('full-player-overlay'),
+  fullPlayerOverlay: document.getElementById('full-player-overlay'), // Alias for clarity
   lyricsContainer: document.getElementById('lyrics-container'),
   searchInput: document.querySelector('.search-box input'),
 

@@ -170,3 +170,29 @@ export function persistOnUnload(audio) {
 export function saveFavoritesToStorage() {
   saveFavorites();
 }
+
+export function extractColorFromImage(imgEl) {
+  try {
+    // 优先使用 ColorThief 以获得更好的主色调
+    if (window.ColorThief) {
+      const colorThief = new ColorThief();
+      const rgb = colorThief.getColor(imgEl);
+      if (rgb && rgb.length === 3) {
+        return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.8)`;
+      }
+    }
+
+    // 降级方案：Canvas 取中心像素 (不仅仅是左上角)
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    // 取图片中心点
+    ctx.drawImage(imgEl, imgEl.naturalWidth / 2, imgEl.naturalHeight / 2, 1, 1, 0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgba(${r}, ${g}, ${b}, 0.8)`;
+  } catch (e) {
+    console.warn('Color extraction failed', e);
+    return null;
+  }
+}
