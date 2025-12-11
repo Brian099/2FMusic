@@ -724,6 +724,18 @@ def _extract_song_level(privilege: dict):
     user_level = privilege.get('dlLevel') or privilege.get('plLevel') or max_level
     return (user_level or 'standard', max_level or user_level or 'standard')
 
+def _extract_song_size(track: dict):
+    """优先取最高音质的文件大小（字节）。"""
+    for key in ('hr', 'sq', 'h', 'm', 'l'):
+        data = track.get(key) or {}
+        size = data.get('size')
+        if size:
+            try:
+                return int(size)
+            except Exception:
+                pass
+    return None
+
 def _format_netease_songs(source_tracks):
     """将网易云接口返回的曲目统一格式化。"""
     songs = []
@@ -739,6 +751,7 @@ def _format_netease_songs(source_tracks):
         user_level, max_level = _extract_song_level(privilege)
         artists = ' / '.join([a.get('name') for a in item.get('ar', []) if a.get('name')]) or '未知艺术家'
         album_info = item.get('al') or {}
+        size_bytes = _extract_song_size(item)
         songs.append({
             'id': sid,
             'title': item.get('name') or f"未命名 {sid}",
@@ -748,7 +761,8 @@ def _format_netease_songs(source_tracks):
             'duration': (item.get('dt') or 0) / 1000,
             'is_vip': is_vip,
             'level': user_level,
-            'max_level': max_level
+            'max_level': max_level,
+            'size': size_bytes
         })
     return songs
 
@@ -1072,6 +1086,7 @@ def search_netease_music():
                 'duration': (item.get('dt') or 0) / 1000,
                 'level': user_level,
                 'max_level': max_level,
+                'size': _extract_song_size(item),
                 'is_vip': is_vip
             })
         return jsonify({'success': True, 'data': songs})

@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { ui } from './ui.js';
 import { api } from './api.js';
+import { playTrack } from './player.js';
 import { showToast, showConfirmDialog, hideProgressToast, formatTime } from './utils.js';
 
 // 网易云业务
@@ -11,6 +12,40 @@ const canDownloadSong = (song) => {
   if (!song) return false;
   return !(song.is_vip && !state.neteaseIsVip);
 };
+
+function findLocalSongIndex(song) {
+  const title = (song.title || '').trim();
+  const artist = (song.artist || '').trim();
+  return state.fullPlaylist.findIndex(local =>
+    (local.title || '').trim() === title &&
+    (local.artist || '').trim() === artist
+  );
+}
+
+async function playDownloadedSong(song) {
+  let idx = findLocalSongIndex(song);
+  if (idx === -1 && songRefreshCallback) {
+    await songRefreshCallback();
+    idx = findLocalSongIndex(song);
+  }
+  if (idx === -1) {
+    showToast('未在本地库找到已下载歌曲');
+    return;
+  }
+  state.playQueue = [...state.fullPlaylist];
+  await playTrack(idx);
+}
+
+function setPlayButton(btnEl, song) {
+  if (!btnEl) return;
+  btnEl.onclick = null;
+  btnEl.disabled = false;
+  btnEl.className = 'btn-primary btn-play';
+  btnEl.style.opacity = '1';
+  btnEl.style.cursor = 'pointer';
+  btnEl.innerHTML = '<i class="fas fa-play"></i> 播放';
+  btnEl.onclick = () => playDownloadedSong(song);
+}
 
 function renderDownloadTasks() {
   const list = ui.neteaseDownloadList;
@@ -113,6 +148,18 @@ function toggleBulkActions(visible) {
   }
 }
 
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return '未知大小';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let val = bytes;
+  let idx = 0;
+  while (val >= 1024 && idx < units.length - 1) {
+    val /= 1024;
+    idx++;
+  }
+  return `${val.toFixed(val >= 10 || idx === 0 ? 0 : 1)}${units[idx]}`;
+}
+
 function renderNeteaseResults() {
   const list = ui.neteaseResultList;
   if (!list) return;
@@ -204,9 +251,10 @@ function renderNeteaseResults() {
     const meta = document.createElement('div');
     meta.className = 'netease-meta';
     const vipBadge = song.is_vip ? '<span class="netease-vip-badge">VIP</span>' : '';
+    const sizeText = formatBytes(song.size);
     meta.innerHTML = `<div class="title">${song.title}${vipBadge}</div>
         <div class="subtitle">${song.artist}</div>
-        <div class="extra"><span class="netease-level-pill ${levelClass}">${levelText}</span>${song.album || '未收录专辑'} · ${formatTime(song.duration || 0)}</div>`;
+        <div class="extra"><span class="netease-level-pill ${levelClass}">${levelText}</span>${sizeText} · ${formatTime(song.duration || 0)}</div>`;
 
     const actions = document.createElement('div');
     actions.className = 'netease-actions';
@@ -225,15 +273,11 @@ function renderNeteaseResults() {
     } else {
       const btn = document.createElement('button');
       if (isDownloaded) {
-        btn.className = 'btn-primary';
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-check"></i> 已下载';
-        btn.style.opacity = '0.7';
-        btn.style.cursor = 'default';
+        setPlayButton(btn, song);
       } else {
         btn.className = 'btn-primary';
         btn.innerHTML = '<i class="fas fa-download"></i> 下载';
-        btn.addEventListener('click', () => downloadNeteaseSong(song, btn));
+        btn.onclick = () => downloadNeteaseSong(song, btn);
       }
       actions.appendChild(btn);
     }
@@ -323,24 +367,16 @@ async function startNeteaseDownload({ taskId, song, btnEl }) {
                 clearInterval(pollTimer);
                 if (btnEl) {
                   btnEl.disabled = false;
-                  btnEl.innerHTML = newStatus === 'success' ? '<i class="fas fa-check"></i> 完成' : '<i class="fas fa-redo"></i> 重试';
-                  // 3秒后恢复默认文字或切换为已下载
-                  setTimeout(() => {
-                    if (btnEl.innerHTML.includes('重试')) {
-                      btnEl.innerHTML = '<i class="fas fa-download"></i> 下载';
-                    } else if (btnEl.innerHTML.includes('完成')) {
-                      // 成功后变为已下载状态
-                      btnEl.className = 'btn-primary';
-                      btnEl.disabled = true;
-                      btnEl.innerHTML = '<i class="fas fa-check"></i> 已下载';
-                      btnEl.style.opacity = '0.7';
-                      btnEl.style.cursor = 'default';
-                    }
-                  }, 3000);
+                  if (newStatus === 'success') {
+                    setPlayButton(btnEl, song);
+                  } else {
+                    btnEl.innerHTML = '<i class="fas fa-redo"></i> 重试';
+                    setTimeout(() => { btnEl.innerHTML = '<i class="fas fa-download"></i> 下载'; }, 3000);
+                  }
                 }
 
                 if (newStatus === 'success') {
-                  if (songRefreshCallback) songRefreshCallback();
+                  if (songRefreshCallback) await songRefreshCallback();
                 } else {
                   showToast(`下载失败: ${tData.message || '未知错误'}`);
                 }
