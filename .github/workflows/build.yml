@@ -17,14 +17,52 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-    # 1. 从 manifest 提取版本号
+    # 1. 从 manifest 提取版本号 + Commit Hash
     - name: Extract Version from Manifest
       id: version
       run: |
-        VERSION=$(grep "^version" manifest | awk -F'=' '{print $2}' | xargs)
+        VERSION_NUM=$(grep "^version" manifest | awk -F'=' '{print $2}' | xargs)
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        
+        # 组合版本号: 0.0.1-a1b2c3d
+        VERSION="${VERSION_NUM}-${SHORT_SHA}"
+        
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "🎯 Detected version: ${VERSION}"
+
+    # 1.1 生成变更日志 (Since last tag)
+    - name: Generate Changelog
+      id: changelog
+      run: |
+        echo "📜 Generating changelog..."
+        # 尝试找到最近的一个 Tag
+        PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        if [ -z "$PREV_TAG" ]; then
+          echo "No previous tag found. Logging last 20 commits."
+          LOGS=$(git log --pretty=format:"- %s (%h) @%an" -n 20)
+        else
+          echo "Found previous tag: $PREV_TAG"
+          # 如果当前 HEAD 就是该 Tag (例如重跑)，则找上上个? 
+          # 通常是 HEAD 在 Tag 之后。
+          # 简单处理：显示该 Tag 之后的所有变更
+          LOGS=$(git log --pretty=format:"- %s (%h) @%an" ${PREV_TAG}..HEAD)
+        fi
+        
+        # 如果日志为空（例如没有新提交），显示 "No changes detected"
+        if [ -z "$LOGS" ]; then
+          LOGS="- No changes detected or rebuild of same commit."
+        fi
+        
+        # 处理多行输出到 GITHUB_OUTPUT
+        {
+          echo "logs<<EOF"
+          echo "$LOGS"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
     # 2. 设置 Python 环境
     - name: Set up Python
@@ -137,8 +175,9 @@ jobs:
           - **Version**: ${{ steps.version.outputs.version }}
           - **Triggered by**: @${{ github.actor }}
           - **Event**: ${{ github.event_name }}
-          - **Commit**: ${{ github.sha }}
-          - **Message**: ${{ github.event.head_commit.message }}
+          
+          ### 📝 Changelog
+          ${{ steps.changelog.outputs.logs }}
 
           ---
 
