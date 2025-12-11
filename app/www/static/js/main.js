@@ -30,7 +30,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 上传页面
   const uploadView = document.getElementById('view-upload');
-  const uploadTargetInput = document.getElementById('upload-target-input');
+  const uploadTargetInput = document.getElementById('upload-target-input'); // hidden value
+  const uploadTargetSelect = document.getElementById('upload-target-select');
+  const uploadTargetCurrent = document.getElementById('upload-target-current');
+  const uploadTargetList = document.getElementById('upload-target-list');
   const uploadDropzone = document.getElementById('upload-dropzone');
   const uploadChooseBtn = document.getElementById('upload-choose-btn');
   const uploadStatus = document.getElementById('upload-status');
@@ -48,18 +51,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (targetEl) targetEl.classList.add('active');
   }
 
+  function setUploadTarget(value, label) {
+    if (uploadTargetInput) uploadTargetInput.value = value || '';
+    if (uploadTargetCurrent) {
+      uploadTargetCurrent.dataset.value = value || '';
+      uploadTargetCurrent.textContent = label || '默认音乐库';
+    }
+    if (uploadTargetList) uploadTargetList.classList.add('hidden');
+    uploadTargetSelect?.classList.remove('open');
+  }
+
   if (ui.navUpload && uploadView && ui.fileUpload) {
     const populateUploadTargets = async () => {
       try {
         const res = await api.mount.list();
-        if (res.success && Array.isArray(res.data) && uploadTargetInput) {
-          // 清除旧项，保留默认
-          uploadTargetInput.innerHTML = '<option value="">默认音乐库</option>';
-          res.data.forEach(path => {
-            const opt = document.createElement('option');
-            opt.value = path;
-            opt.innerText = path;
-            uploadTargetInput.appendChild(opt);
+        if (res.success && Array.isArray(res.data) && uploadTargetList) {
+          uploadTargetList.innerHTML = '';
+          const all = [{ value: '', label: '默认音乐库' }, ...res.data.map(p => ({ value: p, label: p }))];
+          all.forEach(item => {
+            const option = document.createElement('div');
+            option.className = 'upload-select-option';
+            option.dataset.value = item.value;
+            option.innerText = item.label;
+            option.onclick = (e) => { e.stopPropagation(); setUploadTarget(item.value, item.label); };
+            uploadTargetList.appendChild(option);
           });
         }
       } catch (e) { console.error('加载上传目录失败', e); }
@@ -93,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const data = JSON.parse(xhr.responseText);
           if (data.success) {
             uploadStatus.innerText = '上传成功';
-            const targetLabel = (uploadTargetInput && uploadTargetInput.value) ? uploadTargetInput.options[uploadTargetInput.selectedIndex].text || uploadTargetInput.value : '默认音乐库';
+            const targetLabel = uploadTargetCurrent ? uploadTargetCurrent.textContent : '默认音乐库';
             showToast(`已上传 1 首音乐至 ${targetLabel}`);
             loadSongs();
           } else uploadStatus.innerText = '失败: ' + (data.error || '未知错误');
@@ -115,6 +130,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       const file = e.dataTransfer.files[0];
       handleFile(file);
     });
+
+    // 自定义下拉选择行为
+    uploadTargetSelect?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      uploadTargetList?.classList.toggle('hidden');
+      uploadTargetSelect.classList.toggle('open');
+    });
+    document.addEventListener('click', () => {
+      uploadTargetList?.classList.add('hidden');
+      uploadTargetSelect?.classList.remove('open');
+    });
+    // 初始化默认
+    setUploadTarget('', '默认音乐库');
   }
 
   // 其他导航：回到播放器或对应视图
