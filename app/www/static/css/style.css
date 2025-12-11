@@ -2540,14 +2540,25 @@ select:focus {
     display: inline-flex;
     padding: 0.15rem 0.6rem;
     border-radius: 999px;
-    background: rgba(108, 92, 231, 0.15);
-    border: 1px solid rgba(108, 92, 231, 0.3);
+    background: rgba(108, 92, 231, 0.12);
+    border: 1px solid rgba(108, 92, 231, 0.25);
     color: var(--primary);
     font-size: 0.7rem;
     font-weight: bold;
     margin-right: 0.5rem;
     letter-spacing: 0.5px;
 }
+
+/* 不同音质档位的颜色区分 */
+.netease-level-pill.lvl-standard { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.82); }
+.netease-level-pill.lvl-higher { background: rgba(56, 182, 255, 0.18); border-color: rgba(56, 182, 255, 0.35); color: #53b8ff; }
+.netease-level-pill.lvl-exhigh { background: rgba(130, 87, 229, 0.18); border-color: rgba(130, 87, 229, 0.35); color: #b28dff; }
+.netease-level-pill.lvl-lossless { background: rgba(76, 175, 80, 0.18); border-color: rgba(76, 175, 80, 0.35); color: #8de08f; }
+.netease-level-pill.lvl-hires { background: rgba(255, 193, 7, 0.2); border-color: rgba(255, 193, 7, 0.4); color: #ffd54f; }
+.netease-level-pill.lvl-jyeffect { background: rgba(0, 200, 180, 0.18); border-color: rgba(0, 200, 180, 0.35); color: #5ff2e0; }
+.netease-level-pill.lvl-sky { background: rgba(64, 132, 255, 0.18); border-color: rgba(64, 132, 255, 0.35); color: #8bb6ff; }
+.netease-level-pill.lvl-dolby { background: rgba(255, 99, 132, 0.18); border-color: rgba(255, 99, 132, 0.35); color: #ff9bb3; }
+.netease-level-pill.lvl-jymaster { background: linear-gradient(135deg, rgba(255, 215, 64, 0.22), rgba(255, 160, 64, 0.22)); border-color: rgba(255, 215, 64, 0.4); color: #ffe59a; }
 
 .netease-vip-badge {
     display: inline-flex;

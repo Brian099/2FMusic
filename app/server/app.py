@@ -717,6 +717,13 @@ def call_netease_api(path: str, params: dict, method: str = 'GET', need_cookie: 
     resp.raise_for_status()
     return resp.json()
 
+def _extract_song_level(privilege: dict):
+    """返回(用户可下载的最高音质, 曲目最高音质)。"""
+    privilege = privilege or {}
+    max_level = privilege.get('maxBrLevel') or privilege.get('maxbr') or privilege.get('maxLevel')
+    user_level = privilege.get('dlLevel') or privilege.get('plLevel') or max_level
+    return (user_level or 'standard', max_level or user_level or 'standard')
+
 def _format_netease_songs(source_tracks):
     """将网易云接口返回的曲目统一格式化。"""
     songs = []
@@ -725,9 +732,11 @@ def _format_netease_songs(source_tracks):
         if not sid:
             continue
         fee = item.get('fee')
-        privilege_fee = (item.get('privilege') or {}).get('fee')
+        privilege = item.get('privilege') or {}
+        privilege_fee = privilege.get('fee')
         # 仅在明确 fee==1（VIP 曲目）时标记 VIP，避免 fee=8 的“会员高音质”误标
         is_vip = (fee == 1) or (privilege_fee == 1)
+        user_level, max_level = _extract_song_level(privilege)
         artists = ' / '.join([a.get('name') for a in item.get('ar', []) if a.get('name')]) or '未知艺术家'
         album_info = item.get('al') or {}
         songs.append({
@@ -737,7 +746,9 @@ def _format_netease_songs(source_tracks):
             'album': album_info.get('name') or '',
             'cover': (album_info.get('picUrl') or '').replace('http://', 'https://'),
             'duration': (item.get('dt') or 0) / 1000,
-            'is_vip': is_vip
+            'is_vip': is_vip,
+            'level': user_level,
+            'max_level': max_level
         })
     return songs
 
@@ -1051,6 +1062,7 @@ def search_netease_music():
             privilege_fee = privilege.get('fee')
             # 仅 fee==1 视为 VIP；fee=8 只代表会员可享高音质，不强制标 VIP
             is_vip = (fee == 1) or (privilege_fee == 1)
+            user_level, max_level = _extract_song_level(privilege)
             songs.append({
                 'id': song_id,
                 'title': item.get('name') or f"未命名 {song_id}",
@@ -1058,7 +1070,8 @@ def search_netease_music():
                 'album': album_info.get('name') or '',
                 'cover': (album_info.get('picUrl') or '').replace('http://', 'https://'),
                 'duration': (item.get('dt') or 0) / 1000,
-                'level': privilege.get('maxBrLevel') or privilege.get('maxbr') or 'standard',
+                'level': user_level,
+                'max_level': max_level,
                 'is_vip': is_vip
             })
         return jsonify({'success': True, 'data': songs})
@@ -1350,12 +1363,15 @@ def run_download_task(task_id, payload):
 
     try:
         os.makedirs(target_dir, exist_ok=True)
-        if not title:
-            # 拉取歌曲详情补充元信息
+        need_detail_for_level = not payload.get('level')
+        if not title or need_detail_for_level:
+            # 拉取歌曲详情补充元信息和下载音质
             meta_resp = call_netease_api('/song/detail', {'ids': song_id})
             songs = meta_resp.get('songs', []) if isinstance(meta_resp, dict) else []
             if songs:
                 info = songs[0]
+                if need_detail_for_level:
+                    level, _ = _extract_song_level(info.get('privilege') or {})
                 title = info.get('name') or title or f"未命名 {song_id}"
                 artist = ' / '.join([a.get('name') for a in info.get('ar', []) if a.get('name')]) or artist
                 album = (info.get('al') or {}).get('name') or album

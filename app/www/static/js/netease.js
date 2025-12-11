@@ -154,6 +154,31 @@ function renderNeteaseResults() {
     card.className = 'netease-card';
     const isVipSong = !!song.is_vip;
     const canDownloadVip = isVipSong ? state.neteaseIsVip : true;
+    const levelLabelMap = {
+      standard: '标准',
+      higher: '较高',
+      exhigh: '极高',
+      lossless: '无损',
+      hires: 'Hi-Res',
+      jyeffect: '高清环绕声',
+      sky: '沉浸环绕声',
+      dolby: '杜比全景声',
+      jymaster: '超清母带'
+    };
+    const levelClassMap = {
+      standard: 'lvl-standard',
+      higher: 'lvl-higher',
+      exhigh: 'lvl-exhigh',
+      lossless: 'lvl-lossless',
+      hires: 'lvl-hires',
+      jyeffect: 'lvl-jyeffect',
+      sky: 'lvl-sky',
+      dolby: 'lvl-dolby',
+      jymaster: 'lvl-jymaster'
+    };
+    const levelValue = (song.level || 'standard').toLowerCase();
+    const levelText = levelLabelMap[levelValue] || levelValue.toUpperCase();
+    const levelClass = levelClassMap[levelValue] || 'lvl-standard';
 
     const selectWrap = document.createElement('div');
     selectWrap.className = 'netease-select';
@@ -178,11 +203,10 @@ function renderNeteaseResults() {
 
     const meta = document.createElement('div');
     meta.className = 'netease-meta';
-    const levelText = (song.level || 'standard').toUpperCase();
     const vipBadge = song.is_vip ? '<span class="netease-vip-badge">VIP</span>' : '';
     meta.innerHTML = `<div class="title">${song.title}${vipBadge}</div>
         <div class="subtitle">${song.artist}</div>
-        <div class="extra"><span class="netease-level-pill">${levelText}</span>${song.album || '未收录专辑'} · ${formatTime(song.duration || 0)}</div>`;
+        <div class="extra"><span class="netease-level-pill ${levelClass}">${levelText}</span>${song.album || '未收录专辑'} · ${formatTime(song.duration || 0)}</div>`;
 
     const actions = document.createElement('div');
     actions.className = 'netease-actions';
@@ -366,7 +390,8 @@ async function downloadNeteaseSong(song, btnEl) {
     showToast('VIP 歌曲仅登录会员可下载');
     return;
   }
-  const level = ui.neteaseQualitySelect ? ui.neteaseQualitySelect.value : 'exhigh';
+  const preferredLevel = song.download_level || song.downloadLevel || song.level;
+  const level = ui.neteaseQualitySelect ? ui.neteaseQualitySelect.value : (preferredLevel || 'exhigh');
 
   // 检查是否有正在进行的相同任务
   const existingTask = state.neteaseDownloadTasks.find(t => String(t.songId) === String(song.id)
