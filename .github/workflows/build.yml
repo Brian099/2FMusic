@@ -20,6 +20,24 @@ jobs:
       with:
         fetch-depth: 0
 
+    # 0. 检查 manifest 版本号是否变更
+    - name: Check Version Change
+      if: github.event_name == 'push'
+      run: |
+        VER_NOW=$(grep "^version=" manifest | cut -d= -f2 | xargs)
+        # 获取上一 commit 的文件内容 (兼容首次 commit 情况)
+        VER_OLD=$(git show HEAD^:manifest 2>/dev/null | grep "^version=" | cut -d= -f2 | xargs || echo "")
+        
+        echo "Current Version: $VER_NOW"
+        echo "Previous Version: $VER_OLD"
+        
+        if [ "$VER_NOW" == "$VER_OLD" ]; then
+          echo "⛔ Version number not changed in manifest. Skipping build."
+          # 手动失败以停止流程
+          exit 1
+        fi
+        echo "✅ Version change detected."
+
     # 1. 从 manifest 提取版本号 + Commit Hash
     - name: Extract Version from Manifest
       id: version
@@ -46,8 +64,6 @@ jobs:
           LOGS=$(git log --pretty=format:"- %s (%h) @%an" -n 20)
         else
           echo "Found previous tag: $PREV_TAG"
-          # 如果当前 HEAD 就是该 Tag (例如重跑)，则找上上个? 
-          # 通常是 HEAD 在 Tag 之后。
           # 简单处理：显示该 Tag 之后的所有变更
           LOGS=$(git log --pretty=format:"- %s (%h) @%an" ${PREV_TAG}..HEAD)
         fi
@@ -64,11 +80,12 @@ jobs:
           echo "EOF"
         } >> $GITHUB_OUTPUT
 
-    # 2. 设置 Python 环境
+    # 2. 设置 Python 环境 (启用缓存)
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
+        cache: 'pip'
 
     # 3. 安装编译工具和环境依赖
     - name: Install dependencies
@@ -115,7 +132,7 @@ jobs:
     - name: Compile and Cleanup for Binary
       run: |
         echo "🔨 Compiling app.py to binary..."
-        pyinstaller --clean --onefile --name "app" --distpath "app/server" "app/server/app.py"
+        pyinstaller --clean --onefile --name "app" --icon="app/www/static/images/ICON_256.PNG" --distpath "app/server" "app/server/app.py"
         
         chmod +x app/server/app
         
