@@ -727,7 +727,7 @@ def _format_netease_songs(source_tracks):
             'title': item.get('name') or f"未命名 {sid}",
             'artist': artists,
             'album': album_info.get('name') or '',
-            'cover': album_info.get('picUrl'),
+            'cover': (album_info.get('picUrl') or '').replace('http://', 'https://'),
             'duration': (item.get('dt') or 0) / 1000
         })
     return songs
@@ -1043,7 +1043,7 @@ def search_netease_music():
                 'title': item.get('name') or f"未命名 {song_id}",
                 'artist': artists,
                 'album': album_info.get('name') or '',
-                'cover': album_info.get('picUrl'),
+                'cover': (album_info.get('picUrl') or '').replace('http://', 'https://'),
                 'duration': (item.get('dt') or 0) / 1000,
                 'level': privilege.get('maxBrLevel') or privilege.get('maxbr') or 'standard'
             })

@@ -29,8 +29,10 @@ let wakeLock = null;
 async function requestWakeLock() {
   if ('wakeLock' in navigator) {
     try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      console.log('Wake Lock active');
+      if (document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('Wake Lock active');
+      }
     } catch (err) {
       console.warn('Wake Lock failed:', err);
     }
