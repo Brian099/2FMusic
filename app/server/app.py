@@ -326,6 +326,56 @@ def get_metadata(file_path):
     logger.debug(f"文件 {file_path} 元数据: {metadata}")
     return metadata
 
+def extract_embedded_cover(file_path: str, base_name: str = None):
+    """提取音频内嵌封面并保存为 covers/<base_name>.jpg，成功返回 True。"""
+    try:
+        if not os.path.exists(file_path):
+            return False
+        base_name = base_name or os.path.splitext(os.path.basename(file_path))[0]
+        cover_dir = os.path.join(MUSIC_LIBRARY_PATH, 'covers')
+        os.makedirs(cover_dir, exist_ok=True)
+        target_path = os.path.join(cover_dir, f"{base_name}.jpg")
+        if os.path.exists(target_path):
+            return True
+
+        audio = File(file_path)
+        if not audio:
+            return False
+
+        data = None
+
+        # MP3 / ID3
+        if hasattr(audio, 'tags') and audio.tags:
+            if hasattr(audio.tags, 'getall'):
+                for tag in audio.tags.getall('APIC'):
+                    if getattr(tag, 'data', None):
+                        data = tag.data
+                        break
+            if not data:
+                covr = audio.tags.get('covr')
+                if covr:
+                    val = covr[0] if isinstance(covr, (list, tuple)) else covr
+                    try:
+                        data = bytes(val)
+                    except Exception:
+                        pass
+
+        # FLAC / 其他
+        if not data and hasattr(audio, 'pictures'):
+            pics = getattr(audio, 'pictures') or []
+            if pics:
+                data = pics[0].data
+
+        if not data:
+            return False
+
+        with open(target_path, 'wb') as f:
+            f.write(data)
+        return True
+    except Exception as e:
+        logger.warning(f"提取内嵌封面失败: {file_path}, 错误: {e}")
+        return False
+
 AUDIO_EXTS = ('.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a')
 
 def index_single_file(file_path):
@@ -339,10 +389,16 @@ def index_single_file(file_path):
         stat = os.stat(file_path)
         meta = get_metadata(file_path)
         sid = generate_song_id(file_path)
-        # 封面图逻辑需调整：优先根据歌曲ID存，或者内嵌，这里暂时保持兼容逻辑：看有没有同名jpg
-        # 但在多目录下，同名jpg比较难找。暂定：如果同目录下有同名jpg，则 marked as has_cover
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
         base_path = os.path.splitext(file_path)[0]
-        has_cover = 1 if os.path.exists(base_path + ".jpg") or os.path.exists(os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{os.path.basename(base_path)}.jpg")) else 0
+        cover_path = os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{base_name}.jpg")
+        has_cover = 0
+        if os.path.exists(base_path + ".jpg") or os.path.exists(cover_path):
+            has_cover = 1
+        else:
+            # 尝试提取内嵌封面
+            if extract_embedded_cover(file_path, base_name):
+                has_cover = 1
         
         with get_db() as conn:
             conn.execute('''
@@ -937,6 +993,29 @@ def get_album_art_api():
     
     local_path = os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{base_name}.jpg")
     if os.path.exists(local_path):
+        return jsonify({'success': True, 'album_art': f"/api/music/covers/{quote(base_name)}.jpg?filename={quote(base_name)}"})
+
+    # 优先尝试从音频内嵌封面提取
+    actual_path = None
+    if os.path.isabs(filename) and os.path.exists(filename):
+        actual_path = filename
+    else:
+        try:
+            with get_db() as conn:
+                row = conn.execute("SELECT path FROM songs WHERE filename=?", (os.path.basename(filename),)).fetchone()
+                if row and os.path.exists(row['path']):
+                    actual_path = row['path']
+        except Exception as e:
+            logger.warning(f"查询歌曲路径失败: {e}")
+
+    if actual_path and extract_embedded_cover(actual_path, base_name):
+        try:
+            if not os.path.isabs(filename):
+                with get_db() as conn:
+                    conn.execute("UPDATE songs SET has_cover=1 WHERE filename=?", (os.path.basename(filename),))
+                    conn.commit()
+        except Exception:
+            pass
         return jsonify({'success': True, 'album_art': f"/api/music/covers/{quote(base_name)}.jpg?filename={quote(base_name)}"})
 
     # 网络获取并保存
