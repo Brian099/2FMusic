@@ -13,13 +13,31 @@ const canDownloadSong = (song) => {
   return !(song.is_vip && !state.neteaseIsVip);
 };
 
+const normalizeString = (str) => {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+};
+
+function isSameSong(local, song) {
+  const lt = normalizeString(local.title);
+  const la = normalizeString(local.artist);
+  const st = normalizeString(song.title);
+  const sa = normalizeString(song.artist);
+  if (lt && la && lt === st && la === sa) return true;
+  // 备用：用文件名匹配（去扩展名、归一化）
+  const fname = (local.filename || '').replace(/\.[^/.]+$/, '');
+  const nf = normalizeString(fname);
+  if (nf && nf.includes(st) && (!sa || nf.includes(sa.split(' ')[0] || ''))) return true;
+  return false;
+}
+
 function findLocalSongIndex(song) {
-  const title = (song.title || '').trim();
-  const artist = (song.artist || '').trim();
-  return state.fullPlaylist.findIndex(local =>
-    (local.title || '').trim() === title &&
-    (local.artist || '').trim() === artist
-  );
+  return state.fullPlaylist.findIndex(local => isSameSong(local, song));
 }
 
 async function playDownloadedSong(song) {
@@ -260,10 +278,7 @@ function renderNeteaseResults() {
     actions.className = 'netease-actions';
 
     // 检查是否已下载
-    const isDownloaded = state.fullPlaylist && state.fullPlaylist.some(local =>
-      (local.title || '').trim() === (song.title || '').trim() &&
-      (local.artist || '').trim() === (song.artist || '').trim()
-    );
+    const isDownloaded = state.fullPlaylist && state.fullPlaylist.some(local => isSameSong(local, song));
 
     if (isVipSong && !canDownloadVip) {
       const locked = document.createElement('div');
