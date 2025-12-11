@@ -261,9 +261,11 @@
                         <p class="upload-desc">点击或拖拽文件到下方区域，可选择保存目录。</p>
                         <div class="upload-target">
                             <label for="upload-target-input">保存目录（仅可选择已添加的目录或默认库）</label>
-                            <select id="upload-target-input">
-                                <option value="">默认音乐库</option>
-                            </select>
+                            <div class="upload-select" id="upload-target-select">
+                                <div class="upload-select-current" id="upload-target-current" data-value="">默认音乐库</div>
+                                <div class="upload-select-list hidden" id="upload-target-list"></div>
+                            </div>
+                            <input type="hidden" id="upload-target-input" value="">
                         </div>
                         <div id="upload-dropzone" class="upload-dropzone">
                             <i class="fas fa-cloud-upload-alt"></i>
