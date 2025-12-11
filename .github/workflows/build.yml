@@ -181,7 +181,7 @@ jobs:
 
     # 9. 创建发布并上传两个文件
     - name: Create Pre-release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ steps.version.outputs.version }}-pre
         name: 2FMusic ${{ steps.version.outputs.version }} (Dual Versions)
