@@ -239,5 +239,5 @@ jobs:
           ${{ steps.build_binary.outputs.binary_pkg }}
           ${{ steps.build_preview.outputs.preview_pkg }}
         prerelease: true
-        make_latest: true
+        make_latest: legacy
         draft: false
