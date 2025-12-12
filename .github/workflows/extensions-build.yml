@@ -75,10 +75,14 @@ jobs:
         echo "pkg_name=${PKG_NAME}" >> $GITHUB_OUTPUT
         echo "✅ Built: $PKG_NAME"
 
-    - name: Upload Artifacts
+    - name: Upload CGI Extension
       uses: actions/upload-artifact@v4
       with:
-        name: 2fmusic-extensions
-        path: |
-          ${{ steps.build_preview_cgi.outputs.pkg_name }}
-          ${{ steps.build_preview_legacy.outputs.pkg_name }}
+        name: 2fmusic-preview-cgi
+        path: ${{ steps.build_preview_cgi.outputs.pkg_name }}
+
+    - name: Upload Legacy Extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: 2fmusic-preview-legacy
+        path: ${{ steps.build_preview_legacy.outputs.pkg_name }}
