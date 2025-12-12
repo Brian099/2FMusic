@@ -1,0 +1,13 @@
+appname               = 2fmusic-preview
+version               = 0.0.1
+display_name          = 2FMusic Preview
+desc                  = """
+<p><b>2FMusic 预览扩展 (CGI版)</b></p>
+"""
+arch                  = x86_64
+maintainer            = yuexps
+maintainer_url        = https://github.com/yuexps/2FMusic
+distributor           = yuexps
+distributor_url       = https://www.2fstore.cfd
+source                = thirdparty
+desktop_uidir         = ui

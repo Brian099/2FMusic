@@ -1,0 +1,23 @@
+{
+    ".url": {
+        "2fmusic-preview.play": {
+            "title": "播放音乐 (2FMusic CGI)",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "url": "/cgi/ThirdParty/2fmusic-preview/index.cgi",
+            "allUsers": false,
+            "fileTypes": [
+                "mp3",
+                "flac",
+                "wav",
+                "ogg",
+                "m4a",
+                "ape"
+            ],
+            "control": {
+                "fullUrlPerm": "readonly",
+                "pathPerm": "readonly"
+            }
+        }
+    }
+}
