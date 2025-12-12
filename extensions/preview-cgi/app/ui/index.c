@@ -32,7 +32,9 @@ void error_response(int status, const char *msg) {
 // 逻辑模仿 fndepot: REQUEST_URI.split("index.cgi", 1)[1]
 void get_relative_path(char *buffer, size_t size) {
     char *path_info = getenv("PATH_INFO");
-    if (path_info && strlen(path_info) > 0) {
+    // Fix: 某些服务器会将 script path 放入 PATH_INFO，例如 /cgi/.../index.cgi
+    // 如果 PATH_INFO 包含 index.cgi，我们忽略它，转而使用更可靠的 REQUEST_URI 解析
+    if (path_info && strlen(path_info) > 0 && strstr(path_info, CGI_NAME) == NULL) {
         strncpy(buffer, path_info, size - 1);
         return;
     }
