@@ -94,6 +94,9 @@
     <div id="toast-container"></div>
     <audio id="audio-player"></audio>
 
+    <script src="index.cgi/js/api.js" type="module"></script>
+    <script src="index.cgi/js/utils.js"></script>
+    <script src="index.cgi/js/config.js"></script>
     <script type="module" src="index.cgi/js/preview.js"></script>
     <div id="action-menu-overlay" class="custom-overlay">
         <div class="action-sheet glass-panel">
@@ -105,21 +108,6 @@
         </div>
     </div>
 
-    <!-- Login Modal -->
-    <div id="login-overlay" class="custom-overlay"
-        style="align-items: center; justify-content: center; backdrop-filter: blur(10px);">
-        <div class="glass-panel"
-            style="width: 80%; max-width: 300px; padding: 20px; text-align: center; border-radius: 12px; background: rgba(30,30,30,0.9);">
-            <h3 style="margin: 0 0 15px 0; color: #fff;">需要验证</h3>
-            <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">主程序设置了访问密码，请输入密码继续。</p>
-            <input type="password" id="login-password" placeholder="请输入密码"
-                style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; outline: none; box-sizing: border-box;">
-            <button id="login-confirm-btn" class="action-item"
-                style="background: var(--primary-color, #66ccff); color: #fff; width: 100%; justify-content: center; font-weight: bold;">
-                登录
-            </button>
-        </div>
-    </div>
 </body>
 
 </html>

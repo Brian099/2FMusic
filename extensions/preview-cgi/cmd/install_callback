@@ -1,5 +1,6 @@
-#!/bin/bash
-
-### This script is called after the user installs the application.
-
+CONFIG_FILE="${SYNOPKG_PKGDEST}/app/ui/js/config.js"
+if [ -n "${PKG_WIZARD_PASSWORD}" ]; then
+    echo "window.PRECONFIGURED_PASSWORD = \"${PKG_WIZARD_PASSWORD}\";" > "${CONFIG_FILE}"
+fi
+chmod 644 "${CONFIG_FILE}"
 exit 0

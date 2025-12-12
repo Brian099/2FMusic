@@ -1,5 +1,7 @@
 // 后端 API 封装
 const jsonOrThrow = async (resp) => {
+    if (resp.status === 401) throw new Error("401");
+    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
     const data = await resp.json();
     return data;
 };

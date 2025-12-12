@@ -189,39 +189,6 @@ function updateSliderFill(el) {
     el.style.backgroundSize = `${val}% 100%`;
 }
 
-async function handleLogin() {
-    const pwdInput = document.getElementById('login-password');
-    const pwd = pwdInput.value.trim();
-    if (!pwd) return showToast("请输入密码");
-
-    try {
-        await api.login(pwd);
-        localStorage.setItem('2fmusic_pwd', pwd); // Save for auto-login
-        document.getElementById('login-overlay')?.classList.remove('active');
-        state.isAuthed = true;
-        const params = new URLSearchParams(window.location.search);
-        const path = params.get('path') || params.get('file') || params.get('filepath') || params.get('url') || params.get('src');
-        if (path) loadPreviewTrack(path); // Retry
-    } catch (e) {
-        showToast("登录失败: " + e.message);
-    }
-}
-
-async function checkAutoLogin() {
-    const saved = localStorage.getItem('2fmusic_pwd');
-    if (saved) {
-        try {
-            await api.login(saved);
-            state.isAuthed = true;
-            return true;
-        } catch (e) {
-            console.warn("Auto-login failed", e);
-            localStorage.removeItem('2fmusic_pwd');
-        }
-    }
-    return false;
-}
-
 async function loadPreviewTrack(path) {
     // Check if we need to show loading
     const albumArtEl = document.getElementById('fp-cover');
@@ -235,9 +202,10 @@ async function loadPreviewTrack(path) {
         state.track = {
             title: song.title || "未知标题",
             artist: song.artist || "未知艺术家",
-            filename: song.filename,
-            cover: toProxyUrl(song.album_art) || 'images/ICON_256.PNG',
-            src: `${PROXY_PREFIX}/api/music/external/play?path=${encodeURIComponent(song.filename)}`
+            album: song.album || "未知专辑",
+            album_art: song.album_art,
+            src: `api/music/external/play?path=${encodeURIComponent(path)}`,
+            duration: 0
         };
 
         updateTrackUi();
@@ -250,16 +218,19 @@ async function loadPreviewTrack(path) {
         if (albumArtEl) albumArtEl.style.opacity = '1';
 
     } catch (e) {
-        if (e.message === "401") {
-            // Trigger Auth Flow
-            const authed = await checkAutoLogin();
-            if (authed) {
-                loadPreviewTrack(path); // Retry immediately
-            } else {
-                document.getElementById('login-overlay')?.classList.add('active');
+        // If 401, try auto-login if configured
+        if ((e.message === "401" || (e.message && e.message.includes('401'))) && window.PRECONFIGURED_PASSWORD) {
+            try {
+                await api.login(window.PRECONFIGURED_PASSWORD);
+                // Retry once
+                window.PRECONFIGURED_PASSWORD = null; // Prevent infinite loop
+                loadPreviewTrack(path);
+                return;
+            } catch (loginErr) {
+                console.error("Auto-login failed:", loginErr);
             }
-            return;
         }
+
         console.error(e);
         showToast("加载失败: " + e.message);
         if (ui.title) ui.title.innerText = "加载失败";
