@@ -7,15 +7,15 @@ const state = {
     isPlaying: false,
     track: null,
     duration: 0,
-    playMode: 0, // 0: Loop, 1: Pause after finish
+    playMode: 0, // 0: 循环播放, 1: 播完暂停
     favorites: new Set(JSON.parse(localStorage.getItem('2fmusic_favs') || '[]')),
     lyricsData: []
 };
 
 let ui = {};
 
-// Helper to route API requests through CGI proxy
-const PROXY_PREFIX = 'index.cgi';
+// 辅助函数：通过 CGI 代理转发 API 请求
+const PROXY_PREFIX = api.API_BASE;
 function toProxyUrl(url) {
     if (!url) return url;
     if (url.startsWith('/api/')) {
@@ -48,7 +48,7 @@ function initUI() {
 document.addEventListener('DOMContentLoaded', async () => {
     initUI();
     autoResizeUI();
-    updateModeUI(); // Init mode UI
+    updateModeUI(); // 初始化模式图标
     window.addEventListener('resize', () => requestAnimationFrame(autoResizeUI));
     bindEvents();
 
@@ -68,23 +68,18 @@ function bindEvents() {
     ui.modeBtn?.addEventListener('click', togglePlayMode);
     ui.favBtn?.addEventListener('click', toggleFavorite);
 
-    // Open Home Page
+    // 打开主页
     ui.homeBtn?.addEventListener('click', () => {
-        // Open main app based on current host but root path
-        // Since we are proxying, '/' might be intercepted by CGI if logical mapping?
-        // No, fetch('/') hits root. But window.open('/') opens root relative to domain.
-        // If extension is at /cgi/..., '/' is the root of NAS web server.
-        // This is usually where the main Dashboard or 2FMusic (if installed as app) lives.
-        // Assuming 2FMusic has an icon or entry, this is fine.
+        // 总是打开网站根目录（主应用入口）
         window.open('/', '_blank');
     });
 
-    // Menu Events
+    // 菜单事件
     ui.menuBtn?.addEventListener('click', (e) => { e.stopPropagation(); ui.menuOverlay?.classList.add('active'); });
     ui.actionCancel?.addEventListener('click', () => ui.menuOverlay?.classList.remove('active'));
     ui.menuOverlay?.addEventListener('click', (e) => { if (e.target === ui.menuOverlay) ui.menuOverlay.classList.remove('active'); });
 
-    // Refresh Action
+    // 刷新操作
     ui.actionRematch?.addEventListener('click', async () => {
         ui.menuOverlay?.classList.remove('active');
         if (!state.track || !state.track.filename) return;
@@ -93,15 +88,13 @@ function bindEvents() {
             await api.library.clearMetadata(state.track.filename);
             showToast('已清除缓存，正在重新获取...');
 
-            // Reset local display first
-            state.track.cover = 'images/ICON_256.PNG';
+            // 先重置本地显示
+            state.track.cover = `${api.API_BASE}/images/icon_256.png`;
             state.track.lyrics = null;
             updateTrackUi();
             renderNoLyrics('正在搜索歌词...');
 
-            // Re-fetch
-            const query = `?title=${encodeURIComponent(state.track.title)}&artist=${encodeURIComponent(state.track.artist)}&filename=${encodeURIComponent(state.track.filename)}`;
-            // Short delay to allow backend to clear
+            // 重新获取 (延迟以待后台清理)
             setTimeout(() => fetchMetadata(state.track), 500);
 
         } catch (e) {
@@ -110,19 +103,45 @@ function bindEvents() {
         }
     });
 
+    state.isDragging = false;
+
     if (ui.progressBar) {
+        const startDrag = () => { state.isDragging = true; };
+        const endDrag = (e) => {
+            state.isDragging = false;
+            // Ensure final value is applied
+            const pct = parseFloat(e.target.value);
+            if (state.duration) state.audio.currentTime = (pct / 100) * state.duration;
+        };
+
+        ui.progressBar.addEventListener('mousedown', startDrag);
+        ui.progressBar.addEventListener('touchstart', startDrag, { passive: true });
+
+        ui.progressBar.addEventListener('change', endDrag);
+        ui.progressBar.addEventListener('mouseup', endDrag);
+        ui.progressBar.addEventListener('touchend', endDrag);
+
         ui.progressBar.addEventListener('input', (e) => {
+            state.isDragging = true; // 正在输入时保持拖拽状态
             const pct = parseFloat(e.target.value);
             updateSliderFill(e.target);
+            // 实时拖拽更新时间（防抖会在 endDrag 处理，这里仅做视觉反馈）
             if (state.duration) {
-                state.audio.currentTime = (pct / 100) * state.duration;
-                updateTimeDisplay(state.audio.currentTime, state.duration);
+                const time = (pct / 100) * state.duration;
+                updateTimeDisplay(time, state.duration);
+                // Debouncing seek or doing it only on endDrag is often smoother, 
+                // but immediate seek is requested by current code logic.
+                // We only update time display here, audio seek can wait or be throttled?
+                // Main app likely seeks on input. Let's keep it.
+                if (Math.abs(state.audio.currentTime - time) > 1) { // Only seek if diff > 1s to avoid stutter
+                    state.audio.currentTime = time;
+                }
             }
         });
         updateSliderFill(ui.progressBar);
     }
 
-    // Lyrics click seek
+    // 歌词点击进度跳转
     if (ui.lyricsContainer) {
         ui.lyricsContainer.addEventListener('click', (e) => {
             const line = e.target.closest('.lyric-line');
@@ -138,11 +157,15 @@ function bindEvents() {
 
     state.audio.addEventListener('timeupdate', () => {
         if (!state.duration) return;
-        const pct = (state.audio.currentTime / state.duration) * 100;
-        if (ui.progressBar) {
+
+        // 仅在未拖拽时更新进度条
+        if (!state.isDragging && ui.progressBar) {
+            const pct = (state.audio.currentTime / state.duration) * 100;
             ui.progressBar.value = pct;
             updateSliderFill(ui.progressBar);
         }
+
+        // 总是更新时间显示
         updateTimeDisplay(state.audio.currentTime, state.duration);
         syncLyrics(state.audio.currentTime);
     });
@@ -155,21 +178,21 @@ function bindEvents() {
     state.audio.addEventListener('play', () => { state.isPlaying = true; updatePlayBtn(); });
     state.audio.addEventListener('pause', () => { state.isPlaying = false; updatePlayBtn(); });
     state.audio.addEventListener('ended', () => {
-        if (ui.lyricsContainer) ui.lyricsContainer.scrollTop = 0; // Reset lyrics
+        if (ui.lyricsContainer) ui.lyricsContainer.scrollTop = 0; // 重置歌词位置
 
         if (state.playMode === 0) {
-            // Loop
+            // 循环
             state.audio.currentTime = 0;
             state.audio.play();
         } else {
-            // Pause (Stop)
+            // 播完暂停
             state.isPlaying = false;
             updatePlayBtn();
         }
     });
     state.audio.addEventListener('error', (e) => { console.error(e); showToast("播放出错"); });
 
-    // Real-time Favorite Sync
+    // 实时同步收藏状态
     window.addEventListener('storage', (e) => {
         if (e.key === '2fmusic_favs' && e.newValue) {
             try {
@@ -190,21 +213,22 @@ function updateSliderFill(el) {
 }
 
 async function loadPreviewTrack(path) {
-    // Check if we need to show loading
+    // 显示加载状态
     const albumArtEl = document.getElementById('fp-cover');
     if (albumArtEl) albumArtEl.style.opacity = '0.5';
 
     try {
-        const meta = await api.library.externalMeta(path);
-        if (!meta) throw new Error("无法读取文件信息");
+        const json = await api.library.externalMeta(path);
+        if (!json.success || !json.data) throw new Error("无法读取文件信息");
 
-        const song = meta;
+        const song = json.data;
         state.track = {
             title: song.title || "未知标题",
             artist: song.artist || "未知艺术家",
             album: song.album || "未知专辑",
-            album_art: song.album_art,
-            src: `api/music/external/play?path=${encodeURIComponent(path)}`,
+            filename: song.filename || path, // 优先使用 ID，否则使用路径
+            cover: toProxyUrl(song.album_art) || `${api.API_BASE}/images/icon_256.png`,
+            src: `${api.API_BASE}/api/music/external/play?path=${encodeURIComponent(path)}`,
             duration: 0
         };
 
@@ -218,12 +242,12 @@ async function loadPreviewTrack(path) {
         if (albumArtEl) albumArtEl.style.opacity = '1';
 
     } catch (e) {
-        // If 401, try auto-login if configured
+        // 若 401，尝试自动登录（若已配置密码）
         if ((e.message === "401" || (e.message && e.message.includes('401'))) && window.PRECONFIGURED_PASSWORD) {
             try {
                 await api.login(window.PRECONFIGURED_PASSWORD);
-                // Retry once
-                window.PRECONFIGURED_PASSWORD = null; // Prevent infinite loop
+                // 重试一次
+                window.PRECONFIGURED_PASSWORD = null; // 防止无限循环
                 loadPreviewTrack(path);
                 return;
             } catch (loginErr) {
@@ -244,9 +268,8 @@ function updateTrackUi() {
     if (ui.artist) ui.artist.innerText = state.track.artist;
     if (ui.cover) {
         ui.cover.src = state.track.cover;
-        if (state.track.cover.includes('ICON_256') && ui.bgOverlay) {
-            // Reset gradient if default
-            // ui.bgOverlay.style.background = ...; 
+        if (state.track.cover.includes('icon_256') && ui.bgOverlay) {
+            // Reset gradient if default (no-op) 
         }
     }
     updateFavBtn(state.favorites.has(state.track.filename));
@@ -276,14 +299,14 @@ async function fetchMetadata(track) {
         else renderNoLyrics("暂无歌词");
     }).catch(() => renderNoLyrics("歌词加载失败"));
 
-    // Cover (Logic same as main player: if current is default, try fetch)
-    if (track.cover.includes('ICON_256')) {
+    // 封面（同主程序逻辑：如果是默认图标则尝试获取封面）
+    if (track.cover.includes('icon_256')) {
         api.library.albumArt(query).then(d => {
             if (d.success && d.album_art) {
                 track.cover = toProxyUrl(d.album_art);
                 if (ui.cover) {
                     ui.cover.src = track.cover + '&t=' + Date.now();
-                    // Load color
+                    // 提取颜色
                     if (window.ColorThief) {
                         ui.cover.onload = () => updateBgColor(ui.cover);
                     }
@@ -291,9 +314,9 @@ async function fetchMetadata(track) {
             }
         });
     } else {
-        // Already have cover, load color
+        // 已有封面，直接提取颜色
         if (window.ColorThief && ui.cover) {
-            // Wait for image load if setting src just happened, or check complete
+            // 确保图片加载完成后提取颜色
             if (ui.cover.complete) updateBgColor(ui.cover);
             else ui.cover.onload = () => updateBgColor(ui.cover);
         }
@@ -304,7 +327,7 @@ function renderLyrics(lrc) {
     state.lyricsData = [];
     if (!lrc) { renderNoLyrics("暂无歌词"); return; }
 
-    // Logic from player.js: parseAndRenderLyrics
+    // 解析歌词（同主程序逻辑）
     const lines = lrc.split('\n');
     const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
 
@@ -314,7 +337,7 @@ function renderLyrics(lrc) {
             const min = parseInt(match[1]);
             const sec = parseInt(match[2]);
             const ms = parseInt(match[3]);
-            // player.js logic: simple calc
+            // 简单时间计算
             const time = min * 60 + sec + (ms / (match[3].length === 3 ? 1000 : 100));
             const text = line.replace(timeRegex, '').trim();
             if (text) state.lyricsData.push({ time, text });
@@ -334,7 +357,7 @@ function renderLyrics(lrc) {
 
         ui.lyricsContainer.scrollTop = 0;
 
-        // Frontend special: highlight first line if exists
+        // 高亮显示第一句
         const firstLine = ui.lyricsContainer.querySelector('.lyric-line[data-index="0"]');
         if (firstLine) {
             ui.lyricsContainer.querySelectorAll('.lyric-line.active').forEach(l => l.classList.remove('active'));
@@ -358,35 +381,35 @@ function syncLyrics(time) {
         if (time >= state.lyricsData[i].time) activeIndex = i;
         else break;
     }
-    // Force first line active if before first timestamp
+    // 如果在第一句之前，强制高亮第一句
     if (activeIndex === -1 && state.lyricsData.length > 0) activeIndex = 0;
 
     const lines = ui.lyricsContainer.getElementsByClassName('lyric-line');
-    // Clear old active
+    // 清除旧高亮
     const oldActive = ui.lyricsContainer.querySelector('.active');
     if (oldActive) oldActive.classList.remove('active');
 
     if (activeIndex !== -1 && lines[activeIndex]) {
         const line = lines[activeIndex];
         line.classList.add('active');
-        line.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Keep center when playing
+        line.scrollIntoView({ behavior: 'smooth', block: 'center' }); // 保持居中
     }
 }
 
 function updateBgColor(imgEl) {
-    if (!ui.bgOverlay) return;
+    if (!ui.bgOverlay || !imgEl || imgEl.naturalWidth === 0) return;
     try {
-        const colorThief = new ColorThief();
+        const colorThief = new window.ColorThief();
         const color = colorThief.getColor(imgEl);
         if (color) {
-            // Match main player gradient style
+            // 匹配主播放器的渐变风格
             ui.bgOverlay.style.background = `linear-gradient(to bottom, rgb(${color[0]},${color[1]},${color[2]}) 0%, #1a1a1a 100%)`;
         }
     } catch (e) { console.warn(e); }
 }
 
 function togglePlayMode() {
-    // Switch between 0 (Loop) and 1 (Pause after finish)
+    // 切换 循环 / 播完暂停
     state.playMode = state.playMode === 0 ? 1 : 0;
     updateModeUI();
 }
@@ -400,7 +423,7 @@ function updateModeUI() {
         ui.modeBtn.style.opacity = '1';
         ui.modeBtn.classList.add('active-mode');
     } else {
-        // Pause/Once
+        // 播完暂停
         ui.modeBtn.innerHTML = '<i class="fas fa-long-arrow-alt-right"></i>';
         ui.modeBtn.title = "播完暂停";
         ui.modeBtn.style.opacity = '0.7';
@@ -412,17 +435,17 @@ async function toggleFavorite() {
     if (!state.track) return;
     const btn = ui.favBtn;
 
-    // 1. Check if favored
+    // 1. 检查是否已收藏
     if (state.favorites.has(state.track.filename)) {
-        // Remove
+        // 移除收藏
         state.favorites.delete(state.track.filename);
         localStorage.setItem('2fmusic_favs', JSON.stringify([...state.favorites]));
         updateFavBtn(false);
         showToast("已取消收藏");
     } else {
-        // Add
-        // 2. Check source: External?
-        if (state.track.src && state.track.src.includes('/api/music/external/play')) {
+        // 添加收藏
+        // 2. 检查来源：如果是外部文件
+        if (state.track.src && state.track.src.includes(`${api.API_BASE}/api/music/external/play`)) {
             showToast("正在导入并收藏...");
             try {
                 const params = new URLSearchParams(window.location.search);
@@ -432,7 +455,7 @@ async function toggleFavorite() {
 
                 const res = await api.library.importPath(originPath);
                 if (res.success && res.filename) {
-                    // Update track filename to the local one
+                    // 更新为本地文件名
                     state.track.filename = res.filename;
                     state.favorites.add(res.filename);
                     localStorage.setItem('2fmusic_favs', JSON.stringify([...state.favorites]));
@@ -446,7 +469,7 @@ async function toggleFavorite() {
                 showToast("收藏失败: " + e.message);
             }
         } else {
-            // Internal file
+            // 内部文件
             state.favorites.add(state.track.filename);
             localStorage.setItem('2fmusic_favs', JSON.stringify([...state.favorites]));
             updateFavBtn(true);

@@ -9,6 +9,7 @@ const jsonOrThrow = async (resp) => {
 const API_BASE = "index.cgi";
 
 export const api = {
+    API_BASE,
     library: {
         async importPath(path) {
             const res = await fetch(`${API_BASE}/api/music/import_path`, {
@@ -23,7 +24,7 @@ export const api = {
             return jsonOrThrow(res);
         },
         async clearMetadata(id) {
-            const res = await fetch(`${API_BASE}/api/music/clear_metadata/${id}`, { method: 'POST' });
+            const res = await fetch(`${API_BASE}/api/music/clear_metadata/${encodeURIComponent(id)}`, { method: 'POST' });
             return jsonOrThrow(res);
         },
         async lyrics(query) {
