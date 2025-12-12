@@ -232,7 +232,7 @@ jobs:
 
           ### 3. 🧩 预览功能扩展包 (可选)
           - **文件**: `${{ steps.build_preview.outputs.preview_pkg }}`
-          - **说明**: 安装此包以启用系统文件预览功能（需先安装主应用）。
+          - **说明**: 安装此包以启用系统文件管理器预览播放功能（需先安装主应用）。
 
         files: |
           ${{ steps.build_source.outputs.source_pkg }}
