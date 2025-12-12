@@ -15,7 +15,6 @@
 #define CGI_NAME "index.cgi"
 
 // --- 工具函数Utils ---
-
 void error_response(int status, const char *msg) {
     if (status == 404) printf("Status: 404 Not Found\n\n");
     else if (status == 403) printf("Status: 403 Forbidden\n\n");
@@ -202,6 +201,20 @@ void proxy_request(const char *rel_path) {
 
     char *x_requested_with = getenv("HTTP_X_REQUESTED_WITH");
     if (x_requested_with) dprintf(sock, "X-Requested-With: %s\r\n", x_requested_with);
+
+    // Forward Proxy Headers for Flask ProxyFix
+    char *http_host = getenv("HTTP_HOST");
+    if (http_host) dprintf(sock, "X-Forwarded-Host: %s\r\n", http_host);
+    
+    char *remote_addr = getenv("REMOTE_ADDR");
+    if (remote_addr) dprintf(sock, "X-Forwarded-For: %s\r\n", remote_addr);
+    
+    char *https = getenv("HTTPS");
+    if (https && strcasecmp(https, "on") == 0) dprintf(sock, "X-Forwarded-Proto: https\r\n");
+    else dprintf(sock, "X-Forwarded-Proto: http\r\n");
+
+    char *script_name = getenv("SCRIPT_NAME");
+    if (script_name) dprintf(sock, "X-Forwarded-Prefix: %s\r\n", script_name);
 
     dprintf(sock, "\r\n"); // 头部结束
 
