@@ -35,6 +35,19 @@ export const api = {
         async albumArt(query) {
             const res = await fetch(`${API_BASE}/api/music/album-art${query}`);
             return jsonOrThrow(res);
+        },
+        async login(password) {
+            const formData = new URLSearchParams();
+            formData.append('password', password);
+            const res = await fetch('login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData
+            });
+            if (res.url.includes('/login') || res.status === 401) {
+                throw new Error("密码错误");
+            }
+            return true;
         }
     }
 };
