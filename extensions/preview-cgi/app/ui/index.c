@@ -110,7 +110,10 @@ void serve_static_file(const char *rel_path) {
         // 尝试 fallback 到 preview.html
         // 简单处理：严格 404
         char err_msg[2048];
-        snprintf(err_msg, sizeof(err_msg), "File Not Found: %s", filepath);
+        if (snprintf(err_msg, sizeof(err_msg), "File Not Found: %s", filepath) >= sizeof(err_msg)) {
+            // Truncation happened, but we just show what we can
+            err_msg[sizeof(err_msg) - 1] = '\0';
+        }
         error_response(404, err_msg);
     }
 
@@ -227,7 +230,10 @@ void proxy_request(const char *rel_path) {
             to_read = (cl - total_read) > sizeof(buffer) ? sizeof(buffer) : (cl - total_read);
             int n = fread(buffer, 1, to_read, stdin);
             if (n <= 0) break;
-            write(sock, buffer, n);
+            if (write(sock, buffer, n) < 0) {
+                 // Ignore write error or break
+                 break; 
+            }
             total_read += n;
         }
     }
