@@ -203,16 +203,28 @@ def refresh_watchdog_paths():
     global_observer.unschedule_all()
     
     # 2. 获取目标路径
-    targets = {MUSIC_LIBRARY_PATH}
+    # 2. 获取目标路径并去重
     try:
+        raw_paths = {os.path.abspath(MUSIC_LIBRARY_PATH)}
         with get_db() as conn:
             rows = conn.execute("SELECT path FROM mount_points").fetchall()
-            for r in rows: targets.add(r['path'])
-    except: pass
+            for r in rows: 
+                if r['path']:
+                    raw_paths.add(os.path.abspath(r['path']))
+    except: 
+        raw_paths = {os.path.abspath(MUSIC_LIBRARY_PATH)}
+
+    # 路径规范化与去重 (排除子目录)
+    sorted_paths = sorted(list(raw_paths), key=len)
+    final_targets = []
+    for p in sorted_paths:
+        # 如果当前路径是已添加路径的子目录，则跳过
+        if not any(p.startswith(parent + os.sep) or p == parent for parent in final_targets):
+            final_targets.append(p)
     
     # 3. 重新添加 schedule
     event_handler = MusicFileEventHandler()
-    for path in targets:
+    for path in final_targets:
         if os.path.exists(path):
             try:
                 global_observer.schedule(event_handler, path, recursive=True)
@@ -417,13 +429,15 @@ def extract_embedded_cover(file_path: str, base_name: str = None):
                 data = pics[0].data
 
         if not data:
+            logger.info(f"未找到内嵌封面: {file_path}")
             return False
 
         with open(target_path, 'wb') as f:
             f.write(data)
+        logger.info(f"内嵌封面提取并保存: {target_path}")
         return True
     except Exception as e:
-        logger.warning(f"提取内嵌封面失败: {file_path}, 错误: {e}")
+        logger.warning(f"提取内嵌封面失败: {file_path}, 错误: {repr(e)}")
         return False
 
 def extract_embedded_lyrics(file_path: str):
@@ -453,7 +467,7 @@ def extract_embedded_lyrics(file_path: str):
              return audio.tags['©lyr'][0]
 
     except Exception as e:
-        logger.warning(f"提取内嵌歌词失败: {file_path}, 错误: {e}")
+        logger.warning(f"提取内嵌歌词失败: {file_path}, 错误: {repr(e)}")
     return None
 
 def fetch_cover_bytes(url: str):
@@ -1260,9 +1274,11 @@ def get_lyrics_api():
     elif filename:
         save_lrc_path = os.path.join(MUSIC_LIBRARY_PATH, 'lyrics', f"{os.path.splitext(os.path.basename(filename))[0]}.lrc")
 
-    for api_url in api_urls:
+    for idx, api_url in enumerate(api_urls):
         try:
-            logger.info(f"请求网络歌词API: {api_url}")
+            label = "主API" if idx == 0 else "备用API"
+            safe_url = re.sub(r'^https?://[^/]+', f'[{label}]', api_url)
+            logger.info(f"请求网络歌词API: {safe_url}")
             resp = requests.get(api_url, timeout=3, headers=COMMON_HEADERS)
             if resp.status_code == 200:
                 if save_lrc_path:
@@ -1324,9 +1340,11 @@ def get_album_art_api():
         f"https://lrcapi.msfxp.top/cover?artist={quote(artist)}&title={quote(title)}"
     ]
     
-    for api_url in api_urls:
+    for idx, api_url in enumerate(api_urls):
         try:
-            logger.info(f"请求网络封面API: {api_url}")
+            label = "主API" if idx == 0 else "备用API"
+            safe_url = re.sub(r'^https?://[^/]+', f'[{label}]', api_url)
+            logger.info(f"请求网络封面API: {safe_url}")
             resp = requests.get(api_url, timeout=3, headers=COMMON_HEADERS)
             if resp.status_code == 200 and resp.headers.get('content-type', '').startswith('image/'):
                 with open(local_path, 'wb') as f: 
@@ -1426,8 +1444,7 @@ def upload_file():
         save_path = os.path.join(target_dir, filename)
         try:
             file.save(save_path)
-            # 使用单文件索引，不再全量扫描
-            threading.Thread(target=index_single_file, args=(save_path,), daemon=True).start()
+            # 让 Watchdog 处理索引
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
@@ -1443,7 +1460,7 @@ def import_music_by_path():
         dst_path = os.path.join(MUSIC_LIBRARY_PATH, filename)
         if not os.path.exists(dst_path):
             shutil.copy2(src_path, dst_path)
-            threading.Thread(target=index_single_file, args=(dst_path,), daemon=True).start()
+            # 让 Watchdog 处理索引
         return jsonify({'success': True, 'filename': filename})
     except Exception as e: return jsonify({'success': False, 'error': str(e)})
 
