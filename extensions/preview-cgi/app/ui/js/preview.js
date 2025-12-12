@@ -189,12 +189,49 @@ function updateSliderFill(el) {
     el.style.backgroundSize = `${val}% 100%`;
 }
 
-async function loadPreviewTrack(path) {
-    try {
-        const json = await api.library.externalMeta(path);
-        if (!json.success || !json.data) throw new Error("无法读取文件信息");
+async function handleLogin() {
+    const pwdInput = document.getElementById('login-password');
+    const pwd = pwdInput.value.trim();
+    if (!pwd) return showToast("请输入密码");
 
-        const song = json.data;
+    try {
+        await api.login(pwd);
+        localStorage.setItem('2fmusic_pwd', pwd); // Save for auto-login
+        document.getElementById('login-overlay')?.classList.remove('active');
+        state.isAuthed = true;
+        const params = new URLSearchParams(window.location.search);
+        const path = params.get('path') || params.get('file') || params.get('filepath') || params.get('url') || params.get('src');
+        if (path) loadPreviewTrack(path); // Retry
+    } catch (e) {
+        showToast("登录失败: " + e.message);
+    }
+}
+
+async function checkAutoLogin() {
+    const saved = localStorage.getItem('2fmusic_pwd');
+    if (saved) {
+        try {
+            await api.login(saved);
+            state.isAuthed = true;
+            return true;
+        } catch (e) {
+            console.warn("Auto-login failed", e);
+            localStorage.removeItem('2fmusic_pwd');
+        }
+    }
+    return false;
+}
+
+async function loadPreviewTrack(path) {
+    // Check if we need to show loading
+    const albumArtEl = document.getElementById('fp-cover');
+    if (albumArtEl) albumArtEl.style.opacity = '0.5';
+
+    try {
+        const meta = await api.library.externalMeta(path);
+        if (!meta) throw new Error("无法读取文件信息");
+
+        const song = meta;
         state.track = {
             title: song.title || "未知标题",
             artist: song.artist || "未知艺术家",
@@ -210,11 +247,23 @@ async function loadPreviewTrack(path) {
         }
 
         fetchMetadata(state.track);
+        if (albumArtEl) albumArtEl.style.opacity = '1';
 
     } catch (e) {
+        if (e.message === "401") {
+            // Trigger Auth Flow
+            const authed = await checkAutoLogin();
+            if (authed) {
+                loadPreviewTrack(path); // Retry immediately
+            } else {
+                document.getElementById('login-overlay')?.classList.add('active');
+            }
+            return;
+        }
         console.error(e);
         showToast("加载失败: " + e.message);
         if (ui.title) ui.title.innerText = "加载失败";
+        if (albumArtEl) albumArtEl.style.opacity = '1';
     }
 }
 
