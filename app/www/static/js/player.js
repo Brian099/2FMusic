@@ -52,12 +52,12 @@ function releaseWakeLock() {
   }
 }
 
-export async function loadSongs(retry = true) {
+export async function loadSongs(retry = true, initPlayer = true) {
   // 1. 优先使用缓存显示 (SWR)
   if (state.fullPlaylist.length > 0 && state.playQueue.length === 0) {
     state.playQueue = [...state.fullPlaylist];
     if (state.currentTab === 'local' || state.currentTab === 'fav') renderPlaylist();
-    if (!ui.audio.src) { initPlayerState(); }
+    if (!ui.audio.src && initPlayer) { initPlayerState(); }
   }
 
   try {
@@ -105,7 +105,7 @@ export async function loadSongs(retry = true) {
       }
 
       if (state.playQueue.length === 0) state.playQueue = [...state.fullPlaylist];
-      if (!ui.audio.src) { await initPlayerState(); }
+      if (!ui.audio.src && initPlayer) { await initPlayerState(); }
     } else {
       if (ui.songContainer.children.length === 0)
         ui.songContainer.innerHTML = '<div class="loading">加载失败</div>';
@@ -241,6 +241,9 @@ function switchTab(tab) {
   ui.navFav?.classList.remove('active');
   ui.navMount?.classList.remove('active');
   ui.navNetease?.classList.remove('active');
+  ui.navUpload?.classList.remove('active'); // Also deactivate upload nav
+
+  ui.viewUpload?.classList.add('hidden'); // Ensure upload view is hidden
 
   if (tab === 'local') ui.navLocal?.classList.add('active');
   else if (tab === 'fav') ui.navFav?.classList.add('active');

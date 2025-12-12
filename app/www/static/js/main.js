@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             uploadStatus.innerText = '上传成功';
             const targetLabel = uploadTargetCurrent ? uploadTargetCurrent.textContent : '默认音乐库';
             showToast(`已上传 1 首音乐至 ${targetLabel}`);
-            loadSongs();
+            loadSongs(true, false);
           } else uploadStatus.innerText = '失败: ' + (data.error || '未知错误');
         } else uploadStatus.innerText = '服务器错误';
         ui.fileUpload.value = '';
@@ -156,5 +156,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initPlayer();   // 优先初始化播放器，确保缓存秒开
   await initNetease(loadSongs);
   loadMountPoints();
-  startScanPolling(false, loadSongs, loadMountPoints);
+  loadMountPoints();
+  startScanPolling(false, (r) => loadSongs(r, false), loadMountPoints);
 });

@@ -750,6 +750,8 @@ threading.Thread(target=init_watchdog, daemon=True).start()
 
 # --- 路由定义 ---
 @app.route('/')
+def index():
+    return render_template('index.html')
 
 # --- 系统状态接口 ---
 @app.route('/api/system/status')

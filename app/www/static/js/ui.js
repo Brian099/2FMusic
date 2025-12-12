@@ -10,6 +10,7 @@ export const ui = {
   viewPlayer: document.getElementById('view-player'),
   viewMount: document.getElementById('view-mount'),
   viewNetease: document.getElementById('view-netease'),
+  viewUpload: document.getElementById('view-upload'),
   mountListContainer: document.getElementById('mount-list-container'),
   mountPathInput: document.getElementById('mount-path-input'),
   btnAddMount: document.getElementById('btn-add-mount'),
