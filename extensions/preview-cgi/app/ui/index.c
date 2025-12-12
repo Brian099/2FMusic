@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <strings.h> // Required for strcasecmp
 
 #define BACKEND_IP "127.0.0.1"
 #define BACKEND_PORT 23237
@@ -117,7 +118,9 @@ void serve_static_file(const char *rel_path) {
     }
 
     const char *mime = get_mime_type(filepath);
+    printf("X-Debug-Path: %s\n", filepath);
     printf("Content-Type: %s\n\n", mime);
+    fflush(stdout);
 
     char buffer[BUFFER_SIZE];
     size_t n;
