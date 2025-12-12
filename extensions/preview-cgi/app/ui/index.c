@@ -190,6 +190,21 @@ void proxy_request(const char *rel_path) {
     char *user_agent = getenv("HTTP_USER_AGENT");
     if (user_agent) dprintf(sock, "User-Agent: %s\r\n", user_agent);
 
+    char *authorization = getenv("HTTP_AUTHORIZATION");
+    if (authorization) dprintf(sock, "Authorization: %s\r\n", authorization);
+
+    char *referer = getenv("HTTP_REFERER");
+    if (referer) dprintf(sock, "Referer: %s\r\n", referer);
+    
+    char *accept = getenv("HTTP_ACCEPT");
+    if (accept) dprintf(sock, "Accept: %s\r\n", accept);
+    
+    char *accept_language = getenv("HTTP_ACCEPT_LANGUAGE");
+    if (accept_language) dprintf(sock, "Accept-Language: %s\r\n", accept_language);
+
+    char *x_requested_with = getenv("HTTP_X_REQUESTED_WITH");
+    if (x_requested_with) dprintf(sock, "X-Requested-With: %s\r\n", x_requested_with);
+
     dprintf(sock, "\r\n"); // 头部结束
 
     // 转发 POST/PUT 的 API Body

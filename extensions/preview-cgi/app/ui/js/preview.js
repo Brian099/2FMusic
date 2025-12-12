@@ -205,7 +205,9 @@ async function loadPreviewTrack(path) {
 
         updateTrackUi();
         state.audio.src = state.track.src;
-        try { await state.audio.play(); } catch (e) { console.warn("Autoplay blocked"); }
+        try { await state.audio.play(); } catch (e) {
+            if (e.name !== 'AbortError') console.warn("Autoplay blocked/failed", e);
+        }
 
         fetchMetadata(state.track);
 
