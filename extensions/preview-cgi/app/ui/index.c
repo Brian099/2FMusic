@@ -259,7 +259,7 @@ void proxy_request(const char *rel_path) {
             if (line && strncmp(line, "HTTP", 4) == 0) {
                 char *space = strchr(line, ' ');
                 if (space) {
-                    printf("Status:%s\n", space); 
+                    printf("Status:%s\r\n", space); 
                 }
             }
             
@@ -267,9 +267,10 @@ void proxy_request(const char *rel_path) {
             while ((line = strtok(NULL, "\r\n")) != NULL) {
                  if (strncasecmp(line, "Transfer-Encoding", 17) == 0) continue;
                  if (strncasecmp(line, "Connection", 10) == 0) continue;
-                 printf("%s\n", line);
+                 printf("%s\r\n", line);
             }
-            printf("\n"); // 头部结束
+            printf("\r\n"); // 头部结束
+            fflush(stdout); // 确保头部立即发送
             
             // 写入 Body
             fwrite(header_end + 4, 1, n - (header_end - buffer) - 4, stdout);

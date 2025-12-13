@@ -2285,11 +2285,12 @@ def get_external_meta():
     if not path or not os.path.exists(path): return jsonify({'success': False, 'error': '文件未找到'})
     try:
         meta = get_metadata(path)
+        song_id = generate_song_id(path)
         album_art = None
         base_name = os.path.splitext(os.path.basename(path))[0]
         cached_cover = os.path.join(MUSIC_LIBRARY_PATH, 'covers', f"{base_name}.jpg")
         if os.path.exists(cached_cover): album_art = f"/api/music/covers/{quote(base_name)}.jpg?filename={quote(base_name)}"
-        return jsonify({'success': True, 'data': {'filename': path, 'title': meta['title'] or os.path.basename(path), 'artist': meta['artist'] or '未知艺术家', 'album': meta['album'] or '', 'album_art': album_art}})
+        return jsonify({'success': True, 'data': {'id': song_id, 'filename': path, 'title': meta['title'] or os.path.basename(path), 'artist': meta['artist'] or '未知艺术家', 'album': meta['album'] or '', 'album_art': album_art}})
     except Exception as e: return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/music/external/play')

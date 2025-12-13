@@ -213,7 +213,7 @@ function bindEvents() {
             updatePlayBtn();
         }
     });
-    state.audio.addEventListener('error', (e) => { console.error(e); showToast("播放出错"); });
+    state.audio.addEventListener('error', (e) => { console.error(e); showToast("播放出错：" + e.message); });
 
     // 启动轮询同步收藏 (兼容跨设备)
     setInterval(syncFavorites, 3000);
