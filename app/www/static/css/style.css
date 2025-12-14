@@ -1824,7 +1824,18 @@ select:focus {
 
     .lyric-line {
         font-size: 1.1rem;
-        padding: 0.5rem 0;
+        padding: 0.5rem 1.5rem;
+        /* Add side padding to prevent touching edges */
+        white-space: normal;
+        /* Force wrapping */
+        word-wrap: break-word;
+        /* Break long words */
+        overflow-wrap: break-word;
+        /* Modern break */
+        width: 100%;
+        /* Ensure it takes full width to wrap */
+        box-sizing: border-box;
+        /* Include padding in width */
     }
 
     .lyric-line.active {

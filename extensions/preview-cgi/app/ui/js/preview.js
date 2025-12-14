@@ -213,7 +213,16 @@ function bindEvents() {
             updatePlayBtn();
         }
     });
-    state.audio.addEventListener('error', (e) => { console.error(e); showToast("播放出错：仅支持Web端！"); });
+    state.audio.addEventListener('error', (e) => {
+        console.error(e);
+        const err = state.audio.error;
+        let msg = "播放出错";
+        if (err) {
+            msg += ` ${err.code}`;
+            if (err.message) msg += ": " + err.message;
+        }
+        showToast(msg);
+    });
 
     // 启动轮询同步收藏 (兼容跨设备)
     setInterval(syncFavorites, 3000);
@@ -267,9 +276,22 @@ async function loadPreviewTrack(path) {
         };
 
         updateTrackUi();
-        state.audio.src = state.track.src;
-        try { await state.audio.play(); } catch (e) {
-            if (e.name !== 'AbortError') console.warn("Autoplay blocked/failed", e);
+
+        // Detect mobile 没办法，解决不了移动端CGI传输音频的问题，希望有大佬修复！
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (isMobile) {
+            showToast("移动端仅支持查看元数据！");
+            // Hide playback controls
+            if (ui.playBtn) ui.playBtn.style.display = 'none';
+            if (ui.progressBar) ui.progressBar.parentElement.style.visibility = 'hidden';
+            if (ui.modeBtn) ui.modeBtn.style.visibility = 'hidden';
+            // Do NOT set audio source or play
+        } else {
+            state.audio.src = state.track.src;
+            try { await state.audio.play(); } catch (e) {
+                if (e.name !== 'AbortError') console.warn("Autoplay blocked/failed", e);
+            }
         }
 
         fetchMetadata(state.track);

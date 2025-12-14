@@ -7,25 +7,41 @@ export function autoResizeUI() {
   }
 }
 
-export function showToast(msg, duration = 2000) {
+export function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   if (!container) return;
+
+  const iconMap = {
+    'info': '<i class="fas fa-info-circle"></i>',
+    'success': '<i class="fas fa-check-circle"></i>',
+    'error': '<i class="fas fa-exclamation-circle"></i>',
+    'warning': '<i class="fas fa-exclamation-triangle"></i>',
+    'loading': '<i class="fas fa-spinner fa-spin"></i>'
+  };
+
   const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerText = msg;
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+        <div class="toast-icon">${iconMap[type] || iconMap['info']}</div>
+        <div class="toast-content">${message}</div>
+    `;
+
   container.appendChild(toast);
+  // Limit max toasts
+  if (container.childElementCount > 5) {
+    container.firstChild.remove();
+  }
 
   // Animation frame for smooth entry
-  requestAnimationFrame(() => {
-    toast.style.opacity = '1';
-    toast.style.transform = 'translateY(0)';
-  });
+  requestAnimationFrame(() => toast.classList.add('show'));
 
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(20px)';
-    setTimeout(() => toast.remove(), 300);
-  }, duration);
+  // Auto remove
+  if (type !== 'loading') {
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
 }
 
 export function formatTime(seconds) {
