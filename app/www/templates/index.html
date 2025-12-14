@@ -245,10 +245,22 @@
                 </div>
 
                 <div id="view-settings" class="hidden">
-                    <div class="settings-page glass-panel">
+                    <div class="settings-page">
                         <h3><i class="fas fa-cog"></i> 系统设置</h3>
 
-                        <div class="settings-section">
+                        <div class="settings-section glass-panel">
+                            <h4>账户与维护</h4>
+                            <div class="setting-row">
+                                <label>清理缓存</label>
+                                <button id="setting-clear-cache" class="btn-normal">清除浏览器缓存并刷新</button>
+                            </div>
+                            <div class="setting-row">
+                                <label>退出登录</label>
+                                <button id="setting-logout" class="btn-danger">退出当前登录</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-section glass-panel">
                             <h4>外观设置</h4>
                             <div class="setting-row">
                                 <label>全局缩放 (当前: <span id="setting-scale-value">自动</span>)</label>
@@ -263,7 +275,7 @@
                             </div>
                         </div>
 
-                        <div class="settings-section">
+                        <div class="settings-section glass-panel">
                             <h4>网易云音乐配置</h4>
                             <div class="setting-row">
                                 <label>API 地址</label>
@@ -273,11 +285,10 @@
                                 <label>保存目录</label>
                                 <input type="text" id="netease-download-dir" placeholder="下载保存目录">
                             </div>
-                            <button id="netease-change-api" class="btn-danger-block">断开 API 连接</button>
-                        </div>
-
-                        <div class="settings-actions" style="margin-top: 2rem;">
-                            <button id="netease-save-dir" class="btn-primary">保存所有设置</button>
+                            <div class="settings-actions" style="margin-top: 1.5rem;">
+                                <button id="netease-disconnect-btn" class="btn-danger">断开 API 连接</button>
+                                <button id="netease-save-settings-btn" class="btn-primary">保存网易云设置</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -289,7 +300,8 @@
                         <div class="upload-target">
                             <label for="upload-target-input">保存目录（仅可选择已添加的目录或默认库）</label>
                             <div class="upload-select" id="upload-target-select">
-                                <div class="upload-select-current" id="upload-target-current" data-value="">默认音乐库</div>
+                                <div class="upload-select-current" id="upload-target-current" data-value="">默认音乐库
+                                </div>
                                 <div class="upload-select-list hidden" id="upload-target-list"></div>
                             </div>
                             <input type="hidden" id="upload-target-input" value="">

@@ -49,8 +49,20 @@ export const api = {
         }
     },
     async login(password) {
+        // Simple SHA-256 helper
+        const sha256 = async (message) => {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        const hashedPassword = await sha256(password);
+
         const formData = new URLSearchParams();
-        formData.append('password', password);
+        formData.append('password', hashedPassword);
+        // Enable persistent login by default for extension
+        formData.append('remember', 'on');
         const res = await fetch(`${API_BASE}/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -14,6 +14,7 @@ import locale
 import concurrent.futures
 from urllib.parse import quote, unquote, urlparse, parse_qs
 import hashlib
+from datetime import timedelta
 
 if getattr(sys, 'frozen', False):
     # 【打包模式】基准目录是二进制文件所在位置
@@ -25,7 +26,7 @@ else:
     sys.path.insert(0, os.path.join(BASE_DIR, 'lib'))
 
 try:
-    from flask import Flask, render_template, request, jsonify, send_file, redirect, Response, session, url_for
+    from flask import Flask, render_template, request, jsonify, send_file, redirect, Response, session, url_for, make_response
     import requests
     from mutagen import File
     from mutagen.easyid3 import EasyID3
@@ -250,6 +251,11 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 # 配置静态文件缓存过期时间为 1 年 (31536000 秒)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
 app.secret_key = os.environ.get('APP_SECRET_KEY', '2fmusic_secret')
+app.permanent_session_lifetime = timedelta(days=30)
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_file(os.path.join(STATIC_DIR, 'images', 'ICON_256.PNG'), mimetype='image/png')
 
 APP_AUTH_USER = os.environ.get('APP_AUTH_USER', 'admin')
 APP_AUTH_PASSWORD = args.password
@@ -285,12 +291,28 @@ def login():
     next_path = request.args.get('next') or '/'
     if request.method == 'POST':
         pwd = request.form.get('password') or ''
-        if pwd == APP_AUTH_PASSWORD:
+        
+        # Enforce SHA256 Hash check ONLY. Plaintext is no longer accepted.
+        stored_hash = hashlib.sha256(APP_AUTH_PASSWORD.encode()).hexdigest()
+        
+        if pwd.lower() == stored_hash.lower():
             session['authed'] = True
+            if request.form.get('remember'):
+                session.permanent = True
+            else:
+                session.permanent = False
             return redirect(next_path)
         else:
             error = '密码错误'
     return render_template('login.html', error=error, next_path=next_path)
+
+@app.route('/logout')
+def logout():
+    session.pop('authed', None)
+    session.clear()
+    resp = make_response(redirect(url_for('login')))
+    resp.delete_cookie(app.config.get('SESSION_COOKIE_NAME', 'session'))
+    return resp
 
 # --- 数据库管理 ---
 def get_db():
@@ -299,16 +321,13 @@ def get_db():
     return conn
 
 def init_db():
-    try:
+    def _init_db_core():
         with get_db() as conn:
-            # 检查旧模式并迁移（直接重建更简单）
-            # 如果 songs 表没有 'path' 列，视为旧表，删除重建
+            # 检查旧模式并迁移
             try:
                 cursor = conn.execute("SELECT path FROM songs LIMIT 1")
             except Exception:
-                # 抛出异常说明列不存在，或者是旧表
                 conn.execute("DROP TABLE IF EXISTS songs")
-                # mount_files 也不再需要
                 conn.execute("DROP TABLE IF EXISTS mount_files")
 
             conn.execute('''
@@ -344,8 +363,6 @@ def init_db():
                 )
             ''')
             
-
-            
             # 清理错误索引的非音频文件
             try:
                 placeholders = ' OR '.join([f"filename NOT LIKE '%{ext}'" for ext in AUDIO_EXTS])
@@ -353,9 +370,19 @@ def init_db():
             except: pass
             
             conn.commit()
+
+    try:
+        _init_db_core()
         logger.info("数据库初始化完成。")
     except Exception as e:
-        logger.exception(f"数据库初始化失败: {e}")
+        logger.error(f"数据库初始化失败: {e}，尝试重建数据库...")
+        try:
+            if os.path.exists(DB_PATH):
+                os.remove(DB_PATH)
+            _init_db_core()
+            logger.info("数据库重建完成。")
+        except Exception as e2:
+             logger.exception(f"数据库重建失败: {e2}")
 
 # --- 元数据提取 ---
 def get_metadata(file_path):

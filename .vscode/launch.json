@@ -13,7 +13,9 @@
                 "--log-path",
                 "${workspaceFolder}/test_tmp/app.log",
                 "--port",
-                "23237"
+                "23237",
+                "--password",
+                "123456"
             ],
             "justMyCode": true,
             "rules": [

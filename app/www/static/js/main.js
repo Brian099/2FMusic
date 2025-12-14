@@ -1,6 +1,6 @@
 import { state, persistState } from './state.js';
 import { ui } from './ui.js';
-import { autoResizeUI, showToast, persistOnUnload } from './utils.js';
+import { autoResizeUI, showToast, persistOnUnload, showConfirmDialog } from './utils.js';
 import { api } from './api.js';
 import { initNetease } from './netease.js';
 import { initMounts, loadMountPoints, startScanPolling } from './mounts.js';
@@ -194,7 +194,42 @@ document.addEventListener('DOMContentLoaded', async () => {
       ui.scaleInput.value = val;
       updateSliderVisual(val);
       if (ui.scaleValue) ui.scaleValue.innerText = '自动';
+      if (ui.scaleValue) ui.scaleValue.innerText = '自动';
       showToast('已重置为自动缩放');
+    });
+
+    // Clear Cache
+    document.getElementById('setting-clear-cache')?.addEventListener('click', () => {
+      showConfirmDialog('彻底清除数据', '确定要删除本网站的所有本地数据吗？<br>包括缓存、Cookie、偏好设置等。页面将重新加载。', async () => {
+        // 1. Clear Storage
+        localStorage.clear();
+        sessionStorage.clear();
+
+        // 2. Clear Cookies
+        document.cookie.split(";").forEach((c) => {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+
+        // 3. Clear Cache Storage (Service Workers)
+        if ('caches' in window) {
+          try {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(key => caches.delete(key)));
+          } catch (e) {
+            console.error("Failed to clear caches:", e);
+          }
+        }
+
+        // 4. Force Reload
+        location.reload(true);
+      });
+    });
+
+    // Logout
+    document.getElementById('setting-logout')?.addEventListener('click', () => {
+      showConfirmDialog('退出登录', '确定要退出当前登录吗？', () => {
+        window.location.href = '/logout';
+      });
     });
   }
   initSettings();
